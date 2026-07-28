@@ -1,0 +1,121 @@
+@import 'tailwindcss';
+
+/*
+ * OneAI Hub design tokens (source of truth: Figma variables + docs/DESIGN_TOKENS.md).
+ * Semantic vars flip between light and dark; utilities reference the vars,
+ * so `bg-canvas text-content` etc. are automatically theme-aware.
+ *
+ * Note: the auth subtree used to keep its OWN static palette
+ * (`--color-auth-canvas`, `--color-auth-surface`, …) here. That is gone —
+ * auth now follows the same adaptive vars as everything else, sourced from
+ * the resolved theme via `useAuthPalette()` (src/features/auth/palette.ts).
+ * The auth canvas/surface/etc. utilities resolve to the same theme vars and
+ * flip with the rest of the app.
+ */
+:root {
+  --canvas: #eeeeef;
+  --surface: #f7f7f7;
+  --subtle: #eeeeef;
+  --muted: #dededf;
+  --content: #2e2e2f;
+  --content-secondary: #8c8c8e;
+  --on-accent: #f7f7f7;
+  --accent: #a05f28;
+  --accent-soft: #de996533;
+  --edge: #8c8c8e;
+  --edge-strong: #c7c7c9;
+  --focus: #be7a43;
+  --success: #008a34;
+  --danger: #d11c1f;
+  /* Inverse pair — Figma vars bg/surface-inverse (the pill) + text/inverse (its
+     label). slate/900 #2e2e2f, slate/100 #eeeeef; they SWAP between modes.
+     Light: dark pill (slate/900) + light label (slate/100). */
+  --surface-inverse: #2e2e2f;
+  --inverse: #eeeeef;
+}
+
+/*
+ * Dark values are READ FROM THE DARK FIGMA FRAMES (get_variable_defs on
+ * 136:2246 Chat and 142:496 Usage dashboard) — they are no longer sampled off a
+ * phone render. Corrections vs the sampled set: content-secondary #8c8c8e ->
+ * #aaaaac, accent #a05f28 -> #be7a43, danger #d11c1f -> #f3413b.
+ * muted is kept OPAQUE (#343436) rather than the Figma #65656766: the translucent
+ * value composites against the backdrop, so a muted pill flickers grey/near-white
+ * during a theme switch (the native backdrop and the pill repaint on different
+ * clocks). #343436 is that value baked over the canvas — deterministic. See the
+ * long note in src/shared/theme/tokens.ts, which is the source of truth for
+ * JS/inline styles. MUST stay in sync with it.
+ */
+.dark {
+  --canvas: #141415;
+  --surface: #2e2e2f;
+  --subtle: #242425;
+  --muted: #343436;
+  --content: #f7f7f7;
+  --content-secondary: #aaaaac;
+  --on-accent: #f7f7f7;
+  --accent: #be7a43;
+  --accent-soft: #de996533;
+  --edge: #424243;
+  --edge-strong: #585859;
+  --focus: #de9965;
+  --success: #2e7d32;
+  --danger: #f3413b;
+  /* Dark: the pair flips — light pill (slate/100) + dark label (slate/900). */
+  --surface-inverse: #eeeeef;
+  --inverse: #2e2e2f;
+}
+
+@theme inline {
+  /* colors → bg-canvas, bg-surface, text-content, border-edge, bg-accent, … */
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-subtle: var(--subtle);
+  --color-muted: var(--muted);
+  --color-content: var(--content);
+  --color-content-secondary: var(--content-secondary);
+  --color-on-accent: var(--on-accent);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-edge: var(--edge);
+  --color-edge-strong: var(--edge-strong);
+  --color-focus: var(--focus);
+  --color-success: var(--success);
+  --color-danger: var(--danger);
+  /* Inverse pair — themed, so bg-surface-inverse / text-inverse flip with the
+     mode just like every other token (no hand-written @utility needed). */
+  --color-surface-inverse: var(--surface-inverse);
+  --color-inverse: var(--inverse);
+
+  /* typography (Figma / Roboto) → text-h1, text-h3, text-h4, text-body, text-caption, text-tag */
+  --text-h1: 49px;
+  --text-h1--line-height: 59px;
+  --text-h1--letter-spacing: -0.49px;
+  --text-h1--font-weight: 700;
+  --text-h3: 31px;
+  --text-h3--line-height: 37px;
+  --text-h3--letter-spacing: -0.31px;
+  --text-h4: 25px;
+  --text-h4--line-height: 30px;
+  --text-h4--letter-spacing: -0.25px;
+  --text-body: 16px;
+  --text-body--line-height: 24px;
+  --text-caption: 13px;
+  --text-caption--line-height: 20px;
+  --text-tag: 11px;
+  --text-tag--line-height: 15px;
+  --text-tag--letter-spacing: 0.66px;
+
+  /* radius (Figma: sm 4, md 8, lg 12) — spacing keeps Tailwind's 4px base, matching Figma's base unit */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+}
+
+/*
+ * The inverse pair now lives in the theme (bg/surface-inverse + text/inverse
+ * above): `bg-surface-inverse` is the pill, `text-inverse` its label, and both
+ * flip with the mode. The old hand-written @utility bg-inverse / text-inverse —
+ * hardcoded to a single fixed value with no dark variant — are gone; they were
+ * unused and are fully replaced by the themed utilities.
+ */

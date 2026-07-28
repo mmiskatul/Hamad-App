@@ -1,0 +1,31 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Build & upload to TestFlight"
+  lane :beta do
+    setup_ci if ENV["CI"]
+    match(type: "appstore", readonly: true)          # code signing via match repo
+    increment_build_number(xcodeproj: "ios/OneAIHub.xcodeproj")
+    build_app(workspace: "ios/OneAIHub.xcworkspace", scheme: "OneAIHub")
+    upload_to_testflight(skip_waiting_for_build_processing: true)
+  end
+
+  desc "Release to App Store"
+  lane :release do
+    build_app(workspace: "ios/OneAIHub.xcworkspace", scheme: "OneAIHub")
+    upload_to_app_store(submit_for_review: true, automatic_release: true, force: true)
+  end
+end
+
+platform :android do
+  desc "Build & upload to Play internal testing"
+  lane :beta do
+    gradle(project_dir: "android", task: "bundle", build_type: "Release")
+    upload_to_play_store(track: "internal", aab: "android/app/build/outputs/bundle/release/app-release.aab")
+  end
+
+  desc "Promote internal → production"
+  lane :release do
+    upload_to_play_store(track: "internal", track_promote_to: "production")
+  end
+end

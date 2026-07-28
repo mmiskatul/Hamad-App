@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "OneAI Hub",
+    "slug": "oneai-hub",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "oneaihub",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "build": {
+      "preview": {
+        "android": {
+          "buildType": "apk"
+        }
+      },
+      "production": {}
+    },
+    "ios": {
+      "bundleIdentifier": "com.oneaihub.app",
+      "supportsTablet": false,
+      "icon": "./assets/icon.png",
+      "infoPlist": {
+        "CFBundleAllowMixedLocalizations": true,
+        "ExpoLocalization_supportsRTL": true
+      }
+    },
+    "android": {
+      "package": "com.oneaihub.app",
+      "icon": "./assets/icon.png",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
+        "backgroundColor": "#A05F28"
+      }
+    },
+    "locales": {},
+    "extra": {
+      "supportsRTL": true,
+      "router": {},
+      "eas": {
+        "projectId": "7b397c8a-c96d-4501-8438-5ac6ed3b9c0b"
+      }
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "plugins": [
+      "expo-localization",
+      "expo-router"
+    ]
+  }
+}

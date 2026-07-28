@@ -1,0 +1,51 @@
+﻿# Expo Continuous Native Generation — native folders are generated, never committed
+/android
+/ios
+.expo/
+.claude/
+.remember/
+
+# Dependencies and package-manager files
+node_modules/
+.npm/
+.yarn/
+.pnp.*
+
+# Environment files and local secrets
+.env
+.env.*
+!.env.example
+
+# Expo, React Native, and build output
+dist/
+web-build/
+.expo-shared/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Test, coverage, and tool caches
+coverage/
+.jest/
+.eslintcache
+.parcel-cache/
+.turbo/
+*.log
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local MCP server config (personal tokens; not for the team)
+/.mcp.json
+
+# MCP shim node_modules — install on demand with npm install inside the shim dir
+/scripts/mcp-jira-shim/node_modules/
+
+PROGRESS.md
+PROJECT_TRACKER.txt
+setup.sh

@@ -1,0 +1,7 @@
+# iOS
+app_identifier("com.oneaihub.app")     # bundle id — must match Xcode + App Store Connect
+apple_id(ENV["APPLE_ID"])              # App Store Connect account email
+
+# Android
+json_key_file(ENV["PLAY_JSON_KEY_PATH"] || "play-store-key.json") # service account key (never commit)
+package_name("com.oneaihub.app")

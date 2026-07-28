@@ -1,0 +1,412 @@
+{
+  "auth": {
+    "onboarding": {
+      "title": "OneAI Hub",
+      "titleLead": "OneAI",
+      "titleTrail": "Hub",
+      "subtitle": "Your All-in-One AI Assistant",
+      "tagline": "Work with smarter models, create visuals, and save your chats",
+      "cta": {
+        "google": "Continue with Google",
+        "apple": "Continue with Apple",
+        "email": "Log in or sign up"
+      },
+      "divider": "OR",
+      "legal": {
+        "prefix": "By continuing, you agree to the",
+        "terms": "Terms and Conditions",
+        "and": "and",
+        "privacy": "Privacy Policy"
+      }
+    },
+    "login": {
+      "title": "Log in or sign up",
+      "subtitle": "You’ll get smarter responses and can upload files, images and more",
+      "emailPlaceholder": "Email",
+      "emailError": "Please enter a valid email address",
+      "checkError": "Something went wrong. Please try again.",
+      "continue": "Continue",
+      "divider": "OR",
+      "cta": {
+        "google": "Continue with Google",
+        "apple": "Continue with Apple"
+      },
+      "legal": {
+        "terms": "Terms of Use",
+        "separator": "-",
+        "privacy": "Privacy Policy"
+      }
+    },
+    "password": {
+      "title": "Enter your password to login to your account",
+      "placeholder": "Password",
+      "forgot": "Forgot your password?",
+      "submit": "Login"
+    },
+    "signup": {
+      "title": "Finish signing up",
+      "subtitle": "Fill the information to complete the setup",
+      "namePlaceholder": "Full name",
+      "nameRequired": "Please enter your name",
+      "emailLabel": "Verified email address",
+      "passwordPlaceholder": "Password",
+      "submit": "Create Account"
+    },
+    "changePassword": {
+      "title": "Change password",
+      "subtitle": "Set your new password to continue",
+      "currentPlaceholder": "Current Password",
+      "currentRequired": "Enter your current password",
+      "sameAsCurrent": "New password must be different from the current one"
+    },
+    "newPassword": {
+      "title": "New password",
+      "subtitle": "Set your new password to continue",
+      "placeholder": "New Password",
+      "confirmPlaceholder": "Confirm Password",
+      "submit": "Done",
+      "tooShort": "Password must be at least {{count}} characters",
+      "mismatch": "Passwords do not match"
+    },
+    "verifyEmail": {
+      "title": "Verification required",
+      "subtitle": "Enter the verification code sent to your email address",
+      "verify": "Verify",
+      "resendPrefix": "Didn’t receive OTP?",
+      "resend": "Resend code"
+    },
+    "field": {
+      "showPassword": "Show password",
+      "hidePassword": "Hide password"
+    },
+    "language": {
+      "en": "EN",
+      "ar": "AR"
+    },
+    "back": "Go back",
+    "close": "Close"
+  },
+  "common": {
+    "back": "Back",
+    "cancel": "Cancel",
+    "save": "Save",
+    "language": {
+      "label": "Language",
+      "en": "EN",
+      "ar": "AR"
+    }
+  },
+  "settings": {
+    "profile": {
+      "title": "Profile",
+      "edit": "Edit profile",
+      "changePhoto": "Change profile photo",
+      "name": "Name",
+      "email": "Email",
+      "phone": "Phone"
+    },
+    "rows": {
+      "language": "Language",
+      "appearance": "Appearance",
+      "memory": "Memory",
+      "usage": "Usage Dashboard",
+      "upgrade": "Upgrade my Plan",
+      "password": "Change Password",
+      "about": "About",
+      "logout": "Logout"
+    },
+    "appearance": {
+      "system": "System",
+      "light": "Light",
+      "dark": "Dark"
+    },
+    "about": {
+      "title": "About",
+      "terms": "Terms of Use",
+      "privacy": "Privacy Policy",
+      "support": "Contact Support"
+    },
+    "legal": {
+      "empty": "This document isn't available yet."
+    },
+    "terms": {
+      "title": "Terms of Use",
+      "body": ""
+    },
+    "privacy": {
+      "title": "Privacy Policy",
+      "body": ""
+    },
+    "support": {
+      "title": "Contact Support",
+      "subject": "Subject",
+      "message": "How can we help you",
+      "attach": "Attach a file",
+      "removeAttachment": "Remove {{name}}",
+      "send": "Send"
+    },
+    "memory": {
+      "title": "Memory",
+      "enable": "Enable memory",
+      "enableHelp": "Let OneAI Hub personalize your experience based on your chats, and files.",
+      "summary": "Memory summary",
+      "summaryHelp": "OneAI Hub automatically remembers important information about you, and keeps it up to date.",
+      "overview": "Overview",
+      "updatedAt": "Updated {{time}}",
+      "nickname": "Your nickname",
+      "nicknamePlaceholder": "Nickname",
+      "occupation": "Your occupation",
+      "occupationPlaceholder": "Occupation",
+      "about": "More about you",
+      "aboutPlaceholder": "Write down about you...",
+      "add": "Add to memory",
+      "addPlaceholder": "Add or update",
+      "clear": "Clear memory",
+      "clearTitle": "Clear memory summary?",
+      "clearBody": "Everything OneAI Hub has learned about you will be forgotten. This cannot be undone."
+    }
+  },
+  "projects": {
+    "title": "Project",
+    "new": "New Project",
+    "rename": "Rename Project",
+    "create": "Create Project",
+    "search": "Search",
+    "namePlaceholder": "e.g. Event planning",
+    "filters": {
+      "all": "All",
+      "mine": "Created by you",
+      "shared": "Shared with you"
+    },
+    "empty": {
+      "title": "Let’s start your project",
+      "body": "We’re here to help you stay organized. Bring your chats, files, and tools together into one space to get started.",
+      "cta": "New Project",
+      "noMatchTitle": "No projects match",
+      "noMatchBody": "Try a different search or filter."
+    },
+    "scope": {
+      "default": {
+        "title": "Default",
+        "body": "Project can access memories from outside chats, and vice versa."
+      },
+      "project-only": {
+        "title": "Project-only",
+        "body": "Project can access its own memories. Its memories are hidden from outside chats."
+      }
+    },
+    "row": {
+      "shared": "shared",
+      "delete": "Delete {{name}}"
+    },
+    "menu": {
+      "close": "Close project menu",
+      "newChat": "New project chat",
+      "rename": "Rename project",
+      "pin": "Pin project",
+      "unpin": "Unpin project",
+      "sources": "Sources",
+      "files": "Files in chat",
+      "instructions": "Edit instructions",
+      "share": "Shareable link",
+      "delete": "Delete project"
+    },
+    "instructions": {
+      "title": "Instructions",
+      "prompt": "How should model respond?",
+      "help": "You can define the specific persona and tone you would like the model to adopt for this project.",
+      "placeholder": "Speak like a professional legal assistant."
+    },
+    "sources": {
+      "title": "Project sources",
+      "add": "Add sources",
+      "cta": "Add Sources",
+      "emptyTitle": "Give more context",
+      "emptyBody": "Add relevant documents, links, or files to give the AI project specific context and improve its responses.",
+      "download": "Download {{name}}",
+      "remove": "Remove {{name}}"
+    }
+  },
+  "chat": {
+    "menu": "Open menu",
+    "newChat": "New chat",
+    "modelPicker": "Change model, currently {{model}}",
+    "theme": {
+      "toLight": "Switch to light theme",
+      "toDark": "Switch to dark theme"
+    },
+    "plan": {
+      "free": "Free plan",
+      "pro": "Pro plan",
+      "business": "Business plan",
+      "freeName": "Free",
+      "proName": "Pro",
+      "businessName": "Business",
+      "proShort": "Pro",
+      "businessShort": "Business"
+    },
+    "planMenu": {
+      "close": "Close plan menu",
+      "title": "Your plan",
+      "extra": "Buy extra requests"
+    },
+    "drawer": {
+      "brand": "OneAI Hub",
+      "close": "Close menu",
+      "search": "Search chats",
+      "newChat": "New chat",
+      "project": "Project",
+      "recents": "Recents",
+      "seeAll": "See all",
+      "noRecents": "Your chats will appear here",
+      "account": "Account",
+      "signOut": "Sign out",
+      "planCta": "See plans",
+      "language": "Language"
+    },
+    "menuChat": {
+      "close": "Close chat menu",
+      "new": "New chat",
+      "rename": "Rename chat",
+      "pin": "Pin chat",
+      "unpin": "Unpin chat",
+      "files": "Files in chat",
+      "share": "Shareable link",
+      "delete": "Delete chat"
+    },
+    "rename": {
+      "title": "Rename chat",
+      "placeholder": "Chat name"
+    },
+    "deleteDialog": {
+      "title": "Delete chat?",
+      "message": "Are you sure you want to delete this chat? Every message and history in this chat will be permanently deleted.",
+      "confirm": "Delete",
+      "cancel": "Cancel"
+    },
+    "history": {
+      "title": "Recent Chat History",
+      "empty": "You haven't started any chats yet.",
+      "delete": "Delete {{title}}"
+    },
+    "files": {
+      "title": "Files in chat",
+      "empty": "No files have been shared in this chat.",
+      "download": "Download {{name}}",
+      "remove": "Remove {{name}}"
+    },
+    "modelSheet": {
+      "title": "Choose a model",
+      "close": "Close model picker"
+    },
+    "models": {
+      "gpt": "Fast drafting and dependable general answers.",
+      "deepseek": "Engineering tasks, debug, structure logic",
+      "gemini": "Broad search, visual reasoning, planning",
+      "claude": "Long text, polished documents, careful tone",
+      "perplexity": "Source-backed web research and comparison",
+      "grok": "Multilingual business workflows and shared use."
+    },
+    "attachments": {
+      "close": "Close attachment menu",
+      "camera": "Camera",
+      "photos": "Photos",
+      "files": "Files"
+    },
+    "upsell": {
+      "title": "Enjoying using!",
+      "body": "Buy our Pro plan where you can have more requests and tokens, you can also buy extra if you used up all of it.",
+      "cta": "Upgrade to Pro",
+      "close": "Dismiss"
+    },
+    "upgrade": {
+      "title": "Upgrade my Plan",
+      "headline": "Choose your AI power level",
+      "perMonth": "/mo",
+      "currentPlan": "Current Plan",
+      "period": {
+        "monthly": "Monthly",
+        "annual": "Annual",
+        "extra": "Req. Extra"
+      },
+      "free": {
+        "pitch": "Essential tools to get started with AI.",
+        "requests": "50 requests/mo",
+        "tokens": "1000 tokens/mo",
+        "models": "Access to 2 basic models",
+        "support": "Standard support",
+        "cta": "Choose Free"
+      },
+      "pro": {
+        "pitch": "For power users requiring premium models.",
+        "requests": "500 Pro requests/mo",
+        "tokens": "4000 tokens/mo",
+        "upload": "File upload & Voice input",
+        "models": "Access to 4 premium models",
+        "modelsNote": "(GPT-4, Gemini Pro, Claude 3, Grok)",
+        "support": "Priority support",
+        "cta": "Upgrade to Pro"
+      },
+      "business": {
+        "pitch": "Advanced features for collaborative teams.",
+        "requests": "2000 Pro requests/mo",
+        "tokens": "8000 tokens/mo",
+        "upload": "File upload & voice input",
+        "models": "Access to all 6 models",
+        "support": "Priority support",
+        "cta": "Upgrade to Business"
+      },
+      "extra": {
+        "name": "Request Extra",
+        "price": "$???",
+        "priceNote": "current plan",
+        "requestsPlaceholder": "e.g. 25 req",
+        "tokensPlaceholder": "e.g. 250 tokens",
+        "cta": "Confirm & Buy"
+      }
+    },
+    "welcome": {
+      "title": "Welcome to OneAI Hub",
+      "subtitle": "You can ask any complex problem and it will solve those instantly",
+      "upgrade": "Upgrade to Pro"
+    },
+    "composer": {
+      "placeholder": "Ask any problem",
+      "attach": "Add attachment",
+      "voice": "Voice input",
+      "send": "Send message"
+    },
+    "conversation": {
+      "thinking": "Thinking",
+      "like": "Good response",
+      "dislike": "Bad response",
+      "copy": "Copy",
+      "copied": "Copied",
+      "regenerate": "Regenerate",
+      "error": "Something went wrong reaching the model. Try again.",
+      "quotaSpent": "You have used all Request and tokens! want to",
+      "buyMore": "buy more!",
+      "usageLabel": "Usage this period",
+      "tokensChip": "{{value}} tokens",
+      "reqChip": "{{value}} req",
+      "breadcrumb": "Project / {{project}}"
+    }
+  },
+  "dashboard": {
+    "title": "Usage Dashboard",
+    "currentTier": "Current tier",
+    "upgradeCta": "Upgrade to Pro",
+    "totalUsage": "Total Usage",
+    "modelBreakdown": "Model Breakdown",
+    "tierMix": "Tier mix",
+    "colTier": "Tier",
+    "colUsers": "Users",
+    "colShare": "Share",
+    "colRevenue": "Revenue",
+    "total": "Total",
+    "requestsMeter": "{{used}} / {{limit}} Req",
+    "tokensMeter": "{{used}} / {{limit}} Tokens",
+    "reqShort": "{{value}} Req",
+    "tokensShort": "{{value}} tk"
+  }
+}
