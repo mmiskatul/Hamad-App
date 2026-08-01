@@ -9,6 +9,8 @@ import AuthButton from '../components/AuthButton';
 import AuthFlowGate from '../components/AuthFlowGate';
 import AuthTextField from '../components/AuthTextField';
 import LanguageToggle from '../components/LanguageToggle';
+import { loginWithPassword } from '../api/authentication';
+import { requestPasswordResetCode } from '../api/passwordReset';
 import { useAuthFlowStore } from '../store/authFlowStore';
 
 import { useAuthPalette } from '../palette';
@@ -65,26 +67,44 @@ function PasswordContent(): React.JSX.Element {
   const startReset = useAuthFlowStore(state => state.startReset);
 
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | undefined>(undefined);
+  const [submitting, setSubmitting] = useState(false);
+  const [requestingReset, setRequestingReset] = useState(false);
+  const [resetError, setResetError] = useState<string | undefined>(undefined);
 
-  const onLogin = useCallback(() => {
-    if (!email || !password) return;
-    // TODO(backend): POST { email, password } and only continue when the server
-    // accepts it; on failure surface an inline error instead of navigating.
-    // The flow is cleared because login is finished — nothing should be left on
-    // disk — and the route is REPLACED so Android back from home exits the app
-    // instead of walking back into the auth stack.
-    clearFlow();
-    router.replace('/home');
-  }, [email, password, clearFlow, router]);
+  const onLogin = useCallback(async () => {
+    if (!email || !password || submitting) return;
+    setError(undefined);
+    setResetError(undefined);
+    setSubmitting(true);
+    try {
+      await loginWithPassword(email, password);
+      clearFlow();
+      router.replace('/home');
+    } catch {
+      setError(t('auth.password.loginError'));
+    } finally {
+      setSubmitting(false);
+    }
+  }, [email, password, submitting, clearFlow, router, t]);
 
-  const onForgot = useCallback(() => {
+  const onForgot = useCallback(async () => {
+    if (!email || requestingReset) return;
     // Reset reuses the OTP screen, so the only thing to change is the intent —
     // the email is already in the flow, which is exactly why the reset journey
     // has no "enter your email" step of its own.
-    // TODO(backend): request a reset code for `email` before navigating.
-    startReset();
-    router.push('/verify-email');
-  }, [startReset, router]);
+    setRequestingReset(true);
+    setResetError(undefined);
+    try {
+      await requestPasswordResetCode(email);
+      startReset();
+      router.push('/verify-email');
+    } catch {
+      setResetError(t('auth.password.resetRequestError'));
+    } finally {
+      setRequestingReset(false);
+    }
+  }, [email, requestingReset, startReset, router, t]);
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
@@ -132,7 +152,11 @@ function PasswordContent(): React.JSX.Element {
                 <View style={{ gap: FIELD_TO_LINK_GAP }}>
                   <AuthTextField
                     value={password}
-                    onChangeText={setPassword}
+                    onChangeText={next => {
+                      setPassword(next);
+                      if (error) setError(undefined);
+                    }}
+                    error={error}
                     secureToggle
                     placeholder={t('auth.password.placeholder')}
                     autoCapitalize="none"
@@ -144,18 +168,36 @@ function PasswordContent(): React.JSX.Element {
                   />
                   {/* Forgot link — start-aligned caption (flips under RTL) */}
                   <View style={{ alignItems: 'flex-start' }}>
-                    <Pressable onPress={onForgot} accessibilityRole="link" hitSlop={6}>
+                    <Pressable
+                      onPress={onForgot}
+                      accessibilityRole="link"
+                      accessibilityState={{ busy: requestingReset, disabled: requestingReset }}
+                      disabled={requestingReset}
+                      hitSlop={6}
+                      testID="forgot-password"
+                    >
                       <AppText style={{ ...AUTH_TYPE.caption, color: palette.onSurface }}>
-                        {t('auth.password.forgot')}
+                        {requestingReset
+                          ? t('auth.password.sendingResetCode')
+                          : t('auth.password.forgot')}
                       </AppText>
                     </Pressable>
                   </View>
+                  {resetError ? (
+                    <AppText
+                      accessibilityRole="alert"
+                      style={{ ...AUTH_TYPE.caption, color: palette.danger }}
+                    >
+                      {resetError}
+                    </AppText>
+                  ) : null}
                 </View>
 
                 <AuthButton
                   variant="inverse"
                   label={t('auth.password.submit')}
                   onPress={onLogin}
+                  loading={submitting}
                   testID="password-submit"
                 />
               </View>

@@ -1,4 +1,5 @@
 import { apiRequest } from '@/shared/api/client';
+import { saveAuthSession, type AuthenticatedUser, type AuthSession } from '@/shared/auth';
 
 export type RequestCodeResult = {
   email: string;
@@ -11,12 +12,14 @@ export type VerifyCodeResult = {
   verificationToken: string;
 };
 
-export type RegisteredUser = {
-  id: string;
-  email: string;
-  name: string;
-  createdAt: string;
-};
+export type RegisteredUser = AuthenticatedUser;
+
+export class RegistrationSessionPersistenceError extends Error {
+  constructor() {
+    super('The account was created, but its session could not be stored.');
+    this.name = 'RegistrationSessionPersistenceError';
+  }
+}
 
 export function requestRegistrationCode(email: string): Promise<RequestCodeResult> {
   return apiRequest('/auth/registration/request-code', {
@@ -32,14 +35,23 @@ export function verifyRegistrationCode(email: string, code: string): Promise<Ver
   });
 }
 
-export function createRegistrationAccount(input: {
+export async function createRegistrationAccount(input: {
   email: string;
   name: string;
   password: string;
   verificationToken: string;
-}): Promise<{ user: RegisteredUser }> {
-  return apiRequest('/auth/registration', {
+}): Promise<AuthSession> {
+  const session = await apiRequest<AuthSession>('/auth/registration', {
     method: 'POST',
     body: JSON.stringify(input),
   });
+  try {
+    await saveAuthSession(session);
+  } catch {
+    // The POST has already succeeded at this point. Let the screen recover into
+    // the existing-account login flow instead of claiming creation failed and
+    // inviting a duplicate registration attempt.
+    throw new RegistrationSessionPersistenceError();
+  }
+  return session;
 }

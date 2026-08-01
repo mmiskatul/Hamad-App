@@ -1,5 +1,17 @@
+import {
+  clearAuthSession,
+  readAuthSession,
+  saveAuthSession,
+  type AuthSession,
+} from '@/shared/auth';
+
 const DEFAULT_API_BASE_URL = 'http://localhost:4000/api/v1';
 const REQUEST_TIMEOUT_MS = 15_000;
+
+export type ApiRequestOptions = RequestInit & {
+  authenticated?: boolean;
+  retryOnUnauthorized?: boolean;
+};
 
 type ErrorEnvelope = {
   error?: {
@@ -22,24 +34,43 @@ export class ApiError extends Error {
 
 export async function apiRequest<T>(
   path: string,
-  options: RequestInit = {},
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  const { authenticated = false, retryOnUnauthorized = true, ...requestOptions } = options;
+  const session = authenticated ? await readAuthSession() : null;
+  if (authenticated && !session) {
+    throw new ApiError(401, 'AUTH_SESSION_MISSING', 'Please sign in again.');
+  }
+
+  return executeRequest<T>(path, requestOptions, session, retryOnUnauthorized);
+}
+
+async function executeRequest<T>(
+  path: string,
+  options: RequestInit,
+  session: AuthSession | null,
+  retryOnUnauthorized: boolean,
 ): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   const baseUrl = (process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '');
+  const headers = new Headers(options.headers);
+  headers.set('Accept', 'application/json');
+  headers.set('Content-Type', 'application/json');
+  if (session) headers.set('Authorization', `${session.tokenType} ${session.accessToken}`);
 
   try {
     const response = await fetch(baseUrl + (path.startsWith('/') ? path : '/' + path), {
       ...options,
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
       signal: controller.signal,
     });
 
     const body = (await response.json().catch(() => ({}))) as T & ErrorEnvelope;
+    if (response.status === 401 && session && retryOnUnauthorized) {
+      const refreshed = await refreshAuthSession(session);
+      return executeRequest<T>(path, options, refreshed, false);
+    }
     if (!response.ok) {
       throw new ApiError(
         response.status,
@@ -57,4 +88,32 @@ export async function apiRequest<T>(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+let refreshPromise: Promise<AuthSession> | null = null;
+
+async function refreshAuthSession(session: AuthSession): Promise<AuthSession> {
+  if (refreshPromise) return refreshPromise;
+
+  refreshPromise = (async () => {
+    try {
+      const refreshed = await apiRequest<AuthSession>('/auth/refresh', {
+        method: 'POST',
+        body: JSON.stringify({
+          refreshToken: session.refreshToken,
+          sessionToken: session.sessionToken,
+        }),
+        retryOnUnauthorized: false,
+      });
+      await saveAuthSession(refreshed);
+      return refreshed;
+    } catch (error) {
+      await clearAuthSession();
+      throw error;
+    } finally {
+      refreshPromise = null;
+    }
+  })();
+
+  return refreshPromise;
 }

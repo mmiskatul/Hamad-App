@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import SignupScreen from '../screens/SignupScreen';
 import { MIN_PASSWORD_LENGTH } from '../screens/NewPasswordScreen';
+import { RegistrationSessionPersistenceError } from '../api/registration';
 import { useAuthFlowStore } from '../store/authFlowStore';
 import { initI18n } from '@/shared/i18n';
 import { ThemeProvider } from '@/shared/theme';
@@ -23,6 +24,7 @@ const mockReplace = jest.fn();
 const mockRedirect = jest.fn();
 const mockCreateRegistrationAccount = jest.fn();
 jest.mock('../api/registration', () => ({
+  ...jest.requireActual('../api/registration'),
   createRegistrationAccount: (...args: unknown[]) => mockCreateRegistrationAccount(...args),
 }));
 jest.mock('expo-router', () => ({
@@ -51,9 +53,10 @@ function renderScreen() {
   );
 }
 
-function fill(name: string, password: string) {
+function fill(name: string, password: string, confirmPassword = password) {
   fireEvent.changeText(screen.getByTestId('signup-name-input'), name);
   fireEvent.changeText(screen.getByTestId('signup-password-input'), password);
+  fireEvent.changeText(screen.getByTestId('signup-confirm-password-input'), confirmPassword);
 }
 
 beforeAll(async () => {
@@ -107,6 +110,17 @@ it('refuses a password under the minimum length', () => {
   expect(mockReplace).not.toHaveBeenCalled();
 });
 
+it('refuses different password and confirm-password values', () => {
+  renderScreen();
+
+  fill('Sam Rivera', VALID, 'different-password');
+  fireEvent.press(screen.getByTestId('signup-submit'));
+
+  expect(screen.getByText('Passwords do not match')).toBeTruthy();
+  expect(mockCreateRegistrationAccount).not.toHaveBeenCalled();
+  expect(mockReplace).not.toHaveBeenCalled();
+});
+
 it('creates the account through the API, clears the flow and replaces with /home', async () => {
   renderScreen();
 
@@ -124,6 +138,23 @@ it('creates the account through the API, clears the flow and replaces with /home
     verificationToken: 'verified-registration-token',
   });
   expect(useAuthFlowStore.getState().email).toBeNull();
+});
+
+it('moves to password login when the account exists but secure session storage fails', async () => {
+  mockCreateRegistrationAccount.mockRejectedValueOnce(
+    new RegistrationSessionPersistenceError(),
+  );
+  renderScreen();
+
+  fill('Sam Rivera', VALID);
+  fireEvent.press(screen.getByTestId('signup-submit'));
+
+  await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/password'));
+  expect(useAuthFlowStore.getState()).toMatchObject({
+    email: EMAIL,
+    registered: true,
+    intent: 'signin',
+  });
 });
 
 it('redirects to /login when opened with no flow in the store', () => {

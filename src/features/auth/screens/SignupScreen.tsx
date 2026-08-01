@@ -8,7 +8,10 @@ import AuthButton from '../components/AuthButton';
 import AuthFlowGate from '../components/AuthFlowGate';
 import AuthTextField from '../components/AuthTextField';
 import LanguageToggle from '../components/LanguageToggle';
-import { createRegistrationAccount } from '../api/registration';
+import {
+  createRegistrationAccount,
+  RegistrationSessionPersistenceError,
+} from '../api/registration';
 import { useAuthFlowStore } from '../store/authFlowStore';
 import { MIN_PASSWORD_LENGTH } from './NewPasswordScreen';
 
@@ -67,10 +70,13 @@ function SignupContent(): React.JSX.Element {
   const email = useAuthFlowStore(state => state.email);
   const verificationToken = useAuthFlowStore(state => state.verificationToken);
   const clearFlow = useAuthFlowStore(state => state.clearFlow);
+  const startFlow = useAuthFlowStore(state => state.startFlow);
 
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | undefined>(undefined);
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [passwordError, setPasswordError] = useState<string | undefined>(undefined);
+  const [confirmPasswordError, setConfirmPasswordError] = useState<string | undefined>(undefined);
   const [nameError, setNameError] = useState<string | undefined>(undefined);
   const [submissionError, setSubmissionError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
@@ -85,10 +91,20 @@ function SignupContent(): React.JSX.Element {
     setNameError(undefined);
 
     if (password.length < MIN_PASSWORD_LENGTH) {
-      setError(t('auth.newPassword.tooShort', { count: MIN_PASSWORD_LENGTH }));
+      setPasswordError(t('auth.newPassword.tooShort', { count: MIN_PASSWORD_LENGTH }));
       return;
     }
-    setError(undefined);
+    setPasswordError(undefined);
+
+    if (!confirmPassword) {
+      setConfirmPasswordError(t('auth.signup.confirmPasswordRequired'));
+      return;
+    }
+    if (password !== confirmPassword) {
+      setConfirmPasswordError(t('auth.newPassword.mismatch'));
+      return;
+    }
+    setConfirmPasswordError(undefined);
 
     if (!email || !verificationToken) {
       setSubmissionError(t('auth.signup.verifyAgain'));
@@ -104,12 +120,28 @@ function SignupContent(): React.JSX.Element {
       });
       clearFlow();
       router.replace('/home');
-    } catch {
-      setSubmissionError(t('auth.signup.createError'));
+    } catch (cause) {
+      if (cause instanceof RegistrationSessionPersistenceError && email) {
+        startFlow({ email, registered: true });
+        router.replace('/password');
+      } else {
+        setSubmissionError(t('auth.signup.createError'));
+      }
     } finally {
       setSubmitting(false);
     }
-  }, [submitting, name, password, email, verificationToken, t, clearFlow, router]);
+  }, [
+    submitting,
+    name,
+    password,
+    confirmPassword,
+    email,
+    verificationToken,
+    t,
+    clearFlow,
+    startFlow,
+    router,
+  ]);
 
   // Clear each field's error as soon as the user starts correcting it.
   const onChangeName = useCallback(
@@ -123,10 +155,19 @@ function SignupContent(): React.JSX.Element {
   const onChangePassword = useCallback(
     (next: string) => {
       setPassword(next);
-      if (error) setError(undefined);
+      if (passwordError) setPasswordError(undefined);
+      if (confirmPasswordError && next === confirmPassword) setConfirmPasswordError(undefined);
       if (submissionError) setSubmissionError(undefined);
     },
-    [error, submissionError],
+    [passwordError, confirmPasswordError, confirmPassword, submissionError],
+  );
+  const onChangeConfirmPassword = useCallback(
+    (next: string) => {
+      setConfirmPassword(next);
+      if (confirmPasswordError) setConfirmPasswordError(undefined);
+      if (submissionError) setSubmissionError(undefined);
+    },
+    [confirmPasswordError, submissionError],
   );
 
   if (!verificationToken) {
@@ -189,14 +230,26 @@ function SignupContent(): React.JSX.Element {
                     value={password}
                     onChangeText={onChangePassword}
                     secureToggle
-                    error={error}
+                    error={passwordError}
                     placeholder={t('auth.signup.passwordPlaceholder')}
+                    autoCapitalize="none"
+                    autoComplete="new-password"
+                    textContentType="newPassword"
+                    returnKeyType="next"
+                    testID="signup-password-input"
+                  />
+                  <AuthTextField
+                    value={confirmPassword}
+                    onChangeText={onChangeConfirmPassword}
+                    secureToggle
+                    error={confirmPasswordError}
+                    placeholder={t('auth.signup.confirmPasswordPlaceholder')}
                     autoCapitalize="none"
                     autoComplete="new-password"
                     textContentType="newPassword"
                     returnKeyType="go"
                     onSubmitEditing={onCreate}
-                    testID="signup-password-input"
+                    testID="signup-confirm-password-input"
                   />
                 </View>
 

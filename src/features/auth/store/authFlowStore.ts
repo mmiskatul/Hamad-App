@@ -58,7 +58,7 @@ export type AuthFlowState = {
   registered: boolean | null;
   /** What the user is trying to do. null when no flow is in progress. */
   intent: AuthIntent | null;
-  /** One-time registration proof. Runtime-only; never written to AsyncStorage. */
+  /** One-time registration/reset proof. Runtime-only; never written to AsyncStorage. */
   verificationToken: string | null;
   /** False until the persisted value has been read back from AsyncStorage. */
   hasHydrated: boolean;
@@ -66,7 +66,7 @@ export type AuthFlowState = {
   startFlow: (input: { email: string; registered: boolean }) => void;
   /** Switch the running flow to a password reset (the "Forgot?" link). */
   startReset: () => void;
-  /** Keep the server's one-time registration proof in memory for /signup. */
+  /** Keep the server's one-time registration/reset proof in memory. */
   setVerificationToken: (token: string) => void;
   /** Drop the flow — call on completed auth or when abandoning sign-in. */
   clearFlow: () => void;

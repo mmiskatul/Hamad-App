@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import PasswordScreen from '../screens/PasswordScreen';
@@ -25,7 +25,15 @@ const mockBack = jest.fn();
 const mockPush = jest.fn();
 const mockReplace = jest.fn();
 const mockRedirect = jest.fn();
+const mockLoginWithPassword = jest.fn();
+const mockRequestPasswordResetCode = jest.fn();
 let mockCanGoBack = true;
+jest.mock('../api/authentication', () => ({
+  loginWithPassword: (...args: unknown[]) => mockLoginWithPassword(...args),
+}));
+jest.mock('../api/passwordReset', () => ({
+  requestPasswordResetCode: (...args: unknown[]) => mockRequestPasswordResetCode(...args),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     back: mockBack,
@@ -63,12 +71,18 @@ beforeEach(() => {
   mockPush.mockClear();
   mockReplace.mockClear();
   mockRedirect.mockClear();
+  mockLoginWithPassword.mockReset();
+  mockLoginWithPassword.mockResolvedValue({ user: { id: '1' } });
+  mockRequestPasswordResetCode.mockReset();
+  mockRequestPasswordResetCode.mockResolvedValue({ sent: true });
   mockCanGoBack = true;
   // The screen is only reachable mid-flow, so the default fixture is a hydrated
   // store holding a registered email — what the login screen would have written.
   useAuthFlowStore.setState({
     email: 'user@example.com',
     registered: true,
+    intent: 'signin',
+    verificationToken: null,
     hasHydrated: true,
   });
 });
@@ -110,16 +124,57 @@ it('pops the stack on back instead of pushing another route', () => {
   expect(mockReplace).not.toHaveBeenCalled();
 });
 
-it('logs in: clears the flow and replaces the route with /home', () => {
+it('logs in through the backend, clears the flow and replaces the route with /home', async () => {
   renderScreen();
 
   fireEvent.changeText(screen.getByTestId('password-input'), 'sup3rsecret');
   fireEvent.press(screen.getByTestId('password-submit'));
 
+  await waitFor(() => expect(mockLoginWithPassword).toHaveBeenCalledWith(
+    'user@example.com',
+    'sup3rsecret',
+  ));
   // Replace, not push: the auth stack must not sit under the app.
-  expect(mockReplace).toHaveBeenCalledWith('/home');
+  await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/home'));
   expect(mockPush).not.toHaveBeenCalled();
   expect(useAuthFlowStore.getState().email).toBeNull();
+});
+
+it('stays on the password screen when the backend rejects the credentials', async () => {
+  mockLoginWithPassword.mockRejectedValueOnce(new Error('invalid credentials'));
+  renderScreen();
+
+  fireEvent.changeText(screen.getByTestId('password-input'), 'wrong-password');
+  fireEvent.press(screen.getByTestId('password-submit'));
+
+  expect(await screen.findByText('The email or password is incorrect. Please try again.')).toBeTruthy();
+  expect(mockReplace).not.toHaveBeenCalled();
+  expect(useAuthFlowStore.getState().email).toBe('user@example.com');
+});
+
+it('requests a reset code before opening the verification screen', async () => {
+  renderScreen();
+
+  fireEvent.press(screen.getByTestId('forgot-password'));
+
+  await waitFor(() =>
+    expect(mockRequestPasswordResetCode).toHaveBeenCalledWith('user@example.com'),
+  );
+  expect(mockPush).toHaveBeenCalledWith('/verify-email');
+  expect(useAuthFlowStore.getState().intent).toBe('reset');
+});
+
+it('stays on the password screen when the reset email cannot be sent', async () => {
+  mockRequestPasswordResetCode.mockRejectedValueOnce(new Error('smtp unavailable'));
+  renderScreen();
+
+  fireEvent.press(screen.getByTestId('forgot-password'));
+
+  expect(
+    await screen.findByText("We couldn't send the reset code. Please try again."),
+  ).toBeTruthy();
+  expect(mockPush).not.toHaveBeenCalled();
+  expect(useAuthFlowStore.getState().intent).not.toBe('reset');
 });
 
 it('does not navigate when the password field is empty', () => {

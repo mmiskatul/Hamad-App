@@ -17,6 +17,21 @@ jest.mock('@react-native-async-storage/async-storage', () =>
 );
 jest.mock('expo-localization', () => ({ getLocales: () => [{ languageCode: 'en' }] }));
 jest.mock('expo-updates', () => ({ reloadAsync: jest.fn() }));
+jest.mock('react-native-keychain', () => {
+  let credentials = null;
+  return {
+    ACCESSIBLE: { AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY: 'AfterFirstUnlockThisDeviceOnly' },
+    setGenericPassword: jest.fn(async (username, password) => {
+      credentials = { username, password, service: 'test' };
+      return { service: 'test', storage: 'AES' };
+    }),
+    getGenericPassword: jest.fn(async () => credentials || false),
+    resetGenericPassword: jest.fn(async () => {
+      credentials = null;
+      return true;
+    }),
+  };
+});
 
 jest.mock('react-native-reanimated', () => {
   const Reanimated = require('react-native-reanimated/mock');

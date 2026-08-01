@@ -62,6 +62,12 @@ it('sends the OTP and one-time proof in the typed registration requests', async 
           name: 'Sam Rivera',
           createdAt: '2026-08-01T00:00:00.000Z',
         },
+        accessToken: 'access-token',
+        refreshToken: 'rt_refresh-token',
+        sessionToken: 'st_session-token',
+        tokenType: 'Bearer',
+        expiresIn: '15m',
+        sessionExpiresAt: '2026-08-31T00:00:00.000Z',
       }, 201),
     );
 

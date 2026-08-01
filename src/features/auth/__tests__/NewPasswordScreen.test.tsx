@@ -20,6 +20,10 @@ import { ThemeProvider } from '@/shared/theme';
 
 const mockReplace = jest.fn();
 const mockRedirect = jest.fn();
+const mockResetPassword = jest.fn();
+jest.mock('../api/passwordReset', () => ({
+  resetPassword: (...args: unknown[]) => mockResetPassword(...args),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace }),
   Redirect: ({ href }: { href: string }) => {
@@ -58,7 +62,15 @@ beforeAll(async () => {
 beforeEach(() => {
   mockReplace.mockClear();
   mockRedirect.mockClear();
-  useAuthFlowStore.setState({ email: EMAIL, registered: false, hasHydrated: true });
+  mockResetPassword.mockReset();
+  mockResetPassword.mockResolvedValue(undefined);
+  useAuthFlowStore.setState({
+    email: EMAIL,
+    registered: true,
+    intent: 'reset',
+    verificationToken: 'verified-reset-token',
+    hasHydrated: true,
+  });
 });
 
 it('renders the Figma copy and both fields', () => {
@@ -110,8 +122,39 @@ it('clears the flow and replaces with /login, leaving the registry alone', async
 
   await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
 
+  expect(mockResetPassword).toHaveBeenCalledWith({
+    email: EMAIL,
+    password: VALID,
+    resetToken: 'verified-reset-token',
+  });
+
   // Resetting a password must not create an account — that is sign-up's job.
   expect(useAuthFlowStore.getState().email).toBeNull();
+});
+
+it('keeps the reset flow available when the backend rejects the reset proof', async () => {
+  mockResetPassword.mockRejectedValueOnce(new Error('expired proof'));
+  renderScreen();
+
+  fillBoth(VALID, VALID);
+  fireEvent.press(screen.getByTestId('new-password-submit'));
+
+  expect(
+    await screen.findByText(
+      "We couldn't reset your password. Verify the code again and retry.",
+    ),
+  ).toBeTruthy();
+  expect(mockReplace).not.toHaveBeenCalled();
+  expect(useAuthFlowStore.getState().email).toBe(EMAIL);
+});
+
+it('returns to verification when the reset proof is missing', () => {
+  useAuthFlowStore.setState({ verificationToken: null });
+
+  renderScreen();
+
+  expect(mockRedirect).toHaveBeenCalledWith('/verify-email');
+  expect(screen.queryByTestId('new-password-input')).toBeNull();
 });
 
 it('redirects to /login when opened with no flow in the store', () => {

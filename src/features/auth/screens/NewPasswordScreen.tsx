@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AuthBackdrop from '../components/AuthBackdrop';
@@ -8,6 +8,7 @@ import AuthButton from '../components/AuthButton';
 import AuthFlowGate from '../components/AuthFlowGate';
 import AuthTextField from '../components/AuthTextField';
 import LanguageToggle from '../components/LanguageToggle';
+import { resetPassword } from '../api/passwordReset';
 import { useAuthFlowStore } from '../store/authFlowStore';
 
 import { useAuthPalette } from '../palette';
@@ -66,11 +67,14 @@ function NewPasswordContent(): React.JSX.Element {
 
   // Non-null inside AuthFlowGate — the gate redirects when there is no flow.
   const email = useAuthFlowStore(state => state.email);
+  const intent = useAuthFlowStore(state => state.intent);
+  const resetToken = useAuthFlowStore(state => state.verificationToken);
   const clearFlow = useAuthFlowStore(state => state.clearFlow);
 
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [error, setError] = useState<string | undefined>(undefined);
+  const [submissionError, setSubmissionError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
 
   const onDone = useCallback(async () => {
@@ -85,34 +89,45 @@ function NewPasswordContent(): React.JSX.Element {
       return;
     }
     setError(undefined);
+    setSubmissionError(undefined);
 
-    if (!email) return;
+    if (!email || !resetToken) return;
     setSubmitting(true);
     try {
-      // TODO(backend): POST { email, code, password } to set the new password,
-      // and only continue when the server accepts it.
+      await resetPassword({ email, password, resetToken });
       clearFlow();
       router.replace('/login');
+    } catch {
+      setSubmissionError(t('auth.newPassword.resetError'));
     } finally {
       setSubmitting(false);
     }
-  }, [submitting, password, confirm, email, clearFlow, router, t]);
+  }, [submitting, password, confirm, email, resetToken, clearFlow, router, t]);
 
   // Clear the error as soon as the user starts correcting either field.
   const onChangePassword = useCallback(
     (next: string) => {
       setPassword(next);
       if (error) setError(undefined);
+      if (submissionError) setSubmissionError(undefined);
     },
-    [error],
+    [error, submissionError],
   );
   const onChangeConfirm = useCallback(
     (next: string) => {
       setConfirm(next);
       if (error) setError(undefined);
+      if (submissionError) setSubmissionError(undefined);
     },
-    [error],
+    [error, submissionError],
   );
+
+  if (intent !== 'reset') {
+    return <Redirect href="/login" />;
+  }
+  if (!resetToken) {
+    return <Redirect href="/verify-email" />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
@@ -173,6 +188,15 @@ function NewPasswordContent(): React.JSX.Element {
                     testID="confirm-password-input"
                   />
                 </View>
+
+                {submissionError ? (
+                  <AppText
+                    accessibilityRole="alert"
+                    style={{ ...AUTH_TYPE.caption, color: palette.danger, textAlign: 'center' }}
+                  >
+                    {submissionError}
+                  </AppText>
+                ) : null}
 
                 <AuthButton
                   variant="inverse"

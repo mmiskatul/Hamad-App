@@ -8,6 +8,10 @@ import AuthButton from '../components/AuthButton';
 import AuthFlowGate from '../components/AuthFlowGate';
 import LanguageToggle from '../components/LanguageToggle';
 import OtpInput from '../components/OtpInput';
+import {
+  requestPasswordResetCode,
+  verifyPasswordResetCode,
+} from '../api/passwordReset';
 import { requestRegistrationCode, verifyRegistrationCode } from '../api/registration';
 import { useAuthFlowStore } from '../store/authFlowStore';
 
@@ -70,34 +74,40 @@ function VerifyEmailContent(): React.JSX.Element {
   const complete = code.length === OTP_LENGTH;
 
   const onVerify = useCallback(async () => {
-    if (!complete || !email) return;
+    if (!complete || !email || submitting) return;
     // ONE SCREEN, TWO EXITS (see authFlowStore's AuthIntent): a reset already
     // has an account and only needs a replacement password; a sign-up has no
     // account yet and must collect a name first.
-    if (intent === 'reset') {
-      router.push('/new-password');
-      return;
-    }
     setSubmitting(true);
     setFeedback(null);
     try {
-      const result = await verifyRegistrationCode(email, code);
-      setVerificationToken(result.verificationToken);
-      router.push('/signup');
+      if (intent === 'reset') {
+        const result = await verifyPasswordResetCode(email, code);
+        setVerificationToken(result.resetToken);
+        router.push('/new-password');
+      } else {
+        const result = await verifyRegistrationCode(email, code);
+        setVerificationToken(result.verificationToken);
+        router.push('/signup');
+      }
     } catch {
       setCode('');
       setFeedback({ message: t('auth.verifyEmail.invalidCode'), error: true });
     } finally {
       setSubmitting(false);
     }
-  }, [complete, email, code, intent, router, setVerificationToken, t]);
+  }, [complete, email, code, intent, submitting, router, setVerificationToken, t]);
 
   const onResend = useCallback(async () => {
-    if (!email || intent === 'reset') return;
+    if (!email || resending) return;
     setResending(true);
     setFeedback(null);
     try {
-      await requestRegistrationCode(email);
+      if (intent === 'reset') {
+        await requestPasswordResetCode(email);
+      } else {
+        await requestRegistrationCode(email);
+      }
       setCode('');
       setFeedback({ message: t('auth.verifyEmail.resent'), error: false });
     } catch {
@@ -105,7 +115,7 @@ function VerifyEmailContent(): React.JSX.Element {
     } finally {
       setResending(false);
     }
-  }, [email, intent, t]);
+  }, [email, intent, resending, t]);
 
   const onChangeCode = useCallback((next: string) => {
     setCode(next);

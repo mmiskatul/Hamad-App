@@ -41,7 +41,10 @@
       "title": "Enter your password to login to your account",
       "placeholder": "Password",
       "forgot": "Forgot your password?",
-      "submit": "Login"
+      "sendingResetCode": "Sending reset code...",
+      "resetRequestError": "We couldn't send the reset code. Please try again.",
+      "submit": "Login",
+      "loginError": "The email or password is incorrect. Please try again."
     },
     "signup": {
       "title": "Finish signing up",
@@ -50,6 +53,8 @@
       "nameRequired": "Please enter your name",
       "emailLabel": "Verified email address",
       "passwordPlaceholder": "Password",
+      "confirmPasswordPlaceholder": "Confirm password",
+      "confirmPasswordRequired": "Please confirm your password",
       "submit": "Create Account",
       "verifyAgain": "Verify your email again before creating the account",
       "createError": "We couldn't create your account. Please try again."
@@ -68,7 +73,8 @@
       "confirmPlaceholder": "Confirm Password",
       "submit": "Done",
       "tooShort": "Password must be at least {{count}} characters",
-      "mismatch": "Passwords do not match"
+      "mismatch": "Passwords do not match",
+      "resetError": "We couldn't reset your password. Verify the code again and retry."
     },
     "verifyEmail": {
       "title": "Verification required",

@@ -20,9 +20,15 @@ const mockRedirect = jest.fn();
 const mockPush = jest.fn();
 const mockRequestRegistrationCode = jest.fn();
 const mockVerifyRegistrationCode = jest.fn();
+const mockRequestPasswordResetCode = jest.fn();
+const mockVerifyPasswordResetCode = jest.fn();
 jest.mock('../api/registration', () => ({
   requestRegistrationCode: (...args: unknown[]) => mockRequestRegistrationCode(...args),
   verifyRegistrationCode: (...args: unknown[]) => mockVerifyRegistrationCode(...args),
+}));
+jest.mock('../api/passwordReset', () => ({
+  requestPasswordResetCode: (...args: unknown[]) => mockRequestPasswordResetCode(...args),
+  verifyPasswordResetCode: (...args: unknown[]) => mockVerifyPasswordResetCode(...args),
 }));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -65,10 +71,15 @@ beforeEach(() => {
   mockVerifyRegistrationCode.mockResolvedValue({
     verificationToken: 'verified-registration-token',
   });
+  mockRequestPasswordResetCode.mockReset();
+  mockRequestPasswordResetCode.mockResolvedValue({ sent: true });
+  mockVerifyPasswordResetCode.mockReset();
+  mockVerifyPasswordResetCode.mockResolvedValue({ resetToken: 'verified-reset-token' });
   // Reached only mid-sign-up: an unregistered email, as login would have stored.
   useAuthFlowStore.setState({
     email: 'new.person@example.com',
     registered: false,
+    intent: 'signup',
     verificationToken: null,
     hasHydrated: true,
   });
@@ -127,14 +138,32 @@ it('a verified SIGN-UP code stores the server proof and goes on to finish signin
  * Same screen, same code, different exit — this is the whole reason the flow
  * carries an intent instead of the reset journey owning a second OTP screen.
  */
-it('a verified RESET code goes on to set a new password', () => {
+it('a verified RESET code stores the reset proof and goes on to set a new password', async () => {
   useAuthFlowStore.setState({ intent: 'reset' });
   renderScreen();
 
   fireEvent.changeText(screen.getByLabelText('Verification required'), '1234');
   fireEvent.press(screen.getByTestId('verify-submit'));
 
-  expect(mockPush).toHaveBeenCalledWith('/new-password');
+  await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/new-password'));
+  expect(mockVerifyPasswordResetCode).toHaveBeenCalledWith(
+    'new.person@example.com',
+    '1234',
+  );
+  expect(useAuthFlowStore.getState().verificationToken).toBe('verified-reset-token');
+});
+
+it('resends a password reset code during the reset flow', async () => {
+  useAuthFlowStore.setState({ intent: 'reset' });
+  renderScreen();
+
+  fireEvent.press(screen.getByText('Resend code'));
+
+  await waitFor(() =>
+    expect(mockRequestPasswordResetCode).toHaveBeenCalledWith('new.person@example.com'),
+  );
+  expect(mockRequestRegistrationCode).not.toHaveBeenCalled();
+  expect(screen.getByText('A new verification code was sent.')).toBeTruthy();
 });
 
 it('does not navigate while the code is incomplete', () => {
