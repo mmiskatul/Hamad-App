@@ -18,10 +18,9 @@ import { type Plan } from '@/shared/plan';
  * only thing that can count a request. Nothing in the app writes these numbers
  * today, so a fresh install shows zeroes — that is the honest state, not a bug.
  *
- * TODO(backend): replace the persisted values with the usage endpoint's
- * response (TanStack Query), keeping this store as its cache. `periodStart`
- * exists so a stale cached month can be detected and discarded rather than
- * shown as if it were current.
+ * The Usage screen replaces these values with the authenticated `/usage`
+ * snapshot and keeps this store as its offline cache. `periodStart` identifies
+ * stale snapshots from a previous billing month.
  */
 export const USAGE_STORAGE_KEY = 'oneai.usage';
 

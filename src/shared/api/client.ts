@@ -11,6 +11,8 @@ const REQUEST_TIMEOUT_MS = 15_000;
 export type ApiRequestOptions = RequestInit & {
   authenticated?: boolean;
   retryOnUnauthorized?: boolean;
+  /** Override the normal request timeout for long-running operations such as AI replies. */
+  timeoutMs?: number;
 };
 
 type ErrorEnvelope = {
@@ -36,13 +38,18 @@ export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
 ): Promise<T> {
-  const { authenticated = false, retryOnUnauthorized = true, ...requestOptions } = options;
+  const {
+    authenticated = false,
+    retryOnUnauthorized = true,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+    ...requestOptions
+  } = options;
   const session = authenticated ? await readAuthSession() : null;
   if (authenticated && !session) {
     throw new ApiError(401, 'AUTH_SESSION_MISSING', 'Please sign in again.');
   }
 
-  return executeRequest<T>(path, requestOptions, session, retryOnUnauthorized);
+  return executeRequest<T>(path, requestOptions, session, retryOnUnauthorized, timeoutMs);
 }
 
 async function executeRequest<T>(
@@ -50,9 +57,11 @@ async function executeRequest<T>(
   options: RequestInit,
   session: AuthSession | null,
   retryOnUnauthorized: boolean,
+  timeoutMs: number,
 ): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const timeoutController = new AbortController();
+  const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
+  const signal = combineSignals(options.signal, timeoutController.signal);
   const baseUrl = (process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '');
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
@@ -63,13 +72,13 @@ async function executeRequest<T>(
     const response = await fetch(baseUrl + (path.startsWith('/') ? path : '/' + path), {
       ...options,
       headers,
-      signal: controller.signal,
+      signal,
     });
 
     const body = (await response.json().catch(() => ({}))) as T & ErrorEnvelope;
     if (response.status === 401 && session && retryOnUnauthorized) {
       const refreshed = await refreshAuthSession(session);
-      return executeRequest<T>(path, options, refreshed, false);
+      return executeRequest<T>(path, options, refreshed, false, timeoutMs);
     }
     if (!response.ok) {
       throw new ApiError(
@@ -81,6 +90,9 @@ async function executeRequest<T>(
     return body;
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (error instanceof Error && error.name === 'AbortError' && options.signal?.aborted) {
+      throw error;
+    }
     if (error instanceof Error && error.name === 'AbortError') {
       throw new ApiError(408, 'REQUEST_TIMEOUT', 'The request timed out.');
     }
@@ -88,6 +100,16 @@ async function executeRequest<T>(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function combineSignals(first: AbortSignal | null | undefined, second: AbortSignal): AbortSignal {
+  if (!first) return second;
+  if (first.aborted) return first;
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  first.addEventListener('abort', abort, { once: true });
+  second.addEventListener('abort', abort, { once: true });
+  return controller.signal;
 }
 
 let refreshPromise: Promise<AuthSession> | null = null;

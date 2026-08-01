@@ -1,5 +1,6 @@
 import { apiRequest } from '@/shared/api/client';
 import { saveAuthSession, type AuthenticatedUser, type AuthSession } from '@/shared/auth';
+import { useProfileStore } from '@/shared/profile';
 
 export type RequestCodeResult = {
   email: string;
@@ -47,6 +48,12 @@ export async function createRegistrationAccount(input: {
   });
   try {
     await saveAuthSession(session);
+    useProfileStore.getState().replaceProfile({
+      name: session.user.name,
+      email: session.user.email,
+      phone: '',
+      avatarUri: null,
+    });
   } catch {
     // The POST has already succeeded at this point. Let the screen recover into
     // the existing-account login flow instead of claiming creation failed and

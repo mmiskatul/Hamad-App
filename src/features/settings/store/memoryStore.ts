@@ -21,8 +21,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
  * It holds self-described profile text, which the user typed knowingly — no
  * credentials, tokens or OTP codes may ever be added to it.
  *
- * TODO(backend): memory belongs to the account; this store becomes the cache of
- * a profile endpoint, and `summary` is server-generated rather than local.
+ * The backend owns memory; this persisted store is the offline/fast-render cache.
  */
 export const MEMORY_STORAGE_KEY = 'oneai.memory';
 
@@ -43,6 +42,7 @@ export type MemoryState = {
   /** Appends a note to the summary (the "Add or update" composer). */
   appendSummary: (text: string) => void;
   clearSummary: () => void;
+  replaceMemory: (memory: Pick<MemoryState, 'enabled' | 'nickname' | 'occupation' | 'about' | 'summary' | 'summaryUpdatedAt'>) => void;
 };
 
 export const useMemoryStore = create<MemoryState>()(
@@ -74,6 +74,8 @@ export const useMemoryStore = create<MemoryState>()(
       },
 
       clearSummary: () => set({ summary: '', summaryUpdatedAt: null }),
+
+      replaceMemory: (memory) => set(memory),
     }),
     {
       name: MEMORY_STORAGE_KEY,

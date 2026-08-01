@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { I18nManager, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +14,7 @@ import { Icon } from '@/shared/ui/Icon';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
 import TextField from '@/shared/ui/TextField';
 import Toggle from '@/shared/ui/Toggle';
+import { getMemory, updateMemory } from '../api/settingsApi';
 
 /*
  * Memory settings (Figma 185:3164).
@@ -46,6 +47,7 @@ export default function MemoryScreen(): React.JSX.Element {
   const enabled = useMemoryStore((state) => state.enabled);
   const setEnabled = useMemoryStore((state) => state.setEnabled);
   const setProfile = useMemoryStore((state) => state.setProfile);
+  const replaceMemory = useMemoryStore((state) => state.replaceMemory);
 
   // Seeded once from the store — a seed, not a subscription, so a later write
   // cannot yank text out from under someone who is typing.
@@ -53,10 +55,32 @@ export default function MemoryScreen(): React.JSX.Element {
   const [occupation, setOccupation] = useState(() => useMemoryStore.getState().occupation);
   const [about, setAbout] = useState(() => useMemoryStore.getState().about);
 
-  const onConfirm = useCallback(() => {
-    setProfile({ nickname: nickname.trim(), occupation: occupation.trim(), about: about.trim() });
-    router.back();
-  }, [setProfile, nickname, occupation, about, router]);
+  useEffect(() => {
+    getMemory().then((memory) => {
+      const next = {
+        ...memory,
+        summaryUpdatedAt: memory.summaryUpdatedAt ? Date.parse(memory.summaryUpdatedAt) : null,
+      };
+      replaceMemory(next);
+      setNickname(next.nickname);
+      setOccupation(next.occupation);
+      setAbout(next.about);
+    }).catch(() => {
+      // Keep the device cache available while offline.
+    });
+  }, [replaceMemory]);
+
+  const onConfirm = useCallback(async () => {
+    const patch = { nickname: nickname.trim(), occupation: occupation.trim(), about: about.trim() };
+    setProfile(patch);
+    try {
+      const memory = await updateMemory(patch);
+      replaceMemory({ ...memory, summaryUpdatedAt: memory.summaryUpdatedAt ? Date.parse(memory.summaryUpdatedAt) : null });
+      router.back();
+    } catch {
+      // Preserve the draft locally so the user can retry after reconnecting.
+    }
+  }, [setProfile, replaceMemory, nickname, occupation, about, router]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>
@@ -91,7 +115,10 @@ export default function MemoryScreen(): React.JSX.Element {
               </AppText>
               <Toggle
                 value={enabled}
-                onValueChange={setEnabled}
+                onValueChange={(next) => {
+                  setEnabled(next);
+                  updateMemory({ enabled: next }).catch(() => setEnabled(!next));
+                }}
                 accessibilityLabel={t('settings.memory.enable')}
                 testID="memory-enable"
               />

@@ -16,6 +16,8 @@ import { AUTH_TYPE } from '../constants';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
 import { AppText } from '@/shared/ui/AppText';
+import { changePassword } from '../api/changePassword';
+import { ApiError } from '@/shared/api/client';
 
 /*
  * Change password (Figma node 140:1935), opened from the profile's Password row.
@@ -89,10 +91,14 @@ export default function ChangePasswordScreen(): React.JSX.Element {
 
     setSubmitting(true);
     try {
-      // TODO(backend): POST { currentPassword, newPassword }. The CURRENT
-      // password can only be verified server-side — this screen must never
-      // decide that itself, and a wrong one comes back as a field error here.
+      await changePassword(current, password);
       router.back();
+    } catch (requestError) {
+      if (requestError instanceof ApiError && requestError.code === 'CURRENT_PASSWORD_INCORRECT') {
+        setCurrentError(t('auth.changePassword.currentIncorrect'));
+      } else {
+        setError(t('auth.changePassword.failed'));
+      }
     } finally {
       setSubmitting(false);
     }

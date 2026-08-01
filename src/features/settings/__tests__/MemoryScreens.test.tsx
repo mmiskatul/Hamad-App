@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import MemoryScreen from '../screens/MemoryScreen';
@@ -20,6 +20,18 @@ import { ThemeProvider, type ThemeMode } from '@/shared/theme';
 const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
+jest.mock('../api/settingsApi', () => ({
+  getMemory: jest.fn(),
+  updateMemory: jest.fn(),
+  appendMemorySummary: jest.fn(),
+  clearMemorySummary: jest.fn(() => Promise.resolve()),
+}));
+const {
+  getMemory: mockGetMemory,
+  updateMemory: mockUpdateMemory,
+  appendMemorySummary: mockAppendMemorySummary,
+  clearMemorySummary: mockClearMemorySummary,
+} = jest.requireMock('../api/settingsApi') as Record<string, jest.Mock>;
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
@@ -50,6 +62,20 @@ beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
+  mockGetMemory.mockReturnValue(new Promise(() => {}));
+  mockUpdateMemory.mockImplementation(async (patch) => ({
+    ...useMemoryStore.getState(),
+    ...patch,
+    summaryUpdatedAt: useMemoryStore.getState().summaryUpdatedAt
+      ? new Date(useMemoryStore.getState().summaryUpdatedAt!).toISOString()
+      : null,
+  }));
+  mockAppendMemorySummary.mockImplementation(async (text) => ({
+    ...useMemoryStore.getState(),
+    summary: text,
+    summaryUpdatedAt: new Date().toISOString(),
+  }));
+  mockClearMemorySummary.mockClear();
   useMemoryStore.setState({
     enabled: false,
     nickname: '',
@@ -70,7 +96,7 @@ describe('MemoryScreen', () => {
     expect(useMemoryStore.getState().enabled).toBe(true);
   });
 
-  it('holds the text fields as a draft until the header check is tapped', () => {
+  it('holds the text fields as a draft until the header check is tapped', async () => {
     renderScreen(<MemoryScreen />);
 
     fireEvent.changeText(screen.getByTestId('memory-nickname'), '  Mahfuz  ');
@@ -83,7 +109,7 @@ describe('MemoryScreen', () => {
 
     expect(useMemoryStore.getState().nickname).toBe('Mahfuz');
     expect(useMemoryStore.getState().occupation).toBe('Engineer');
-    expect(mockBack).toHaveBeenCalled();
+    await waitFor(() => expect(mockBack).toHaveBeenCalled());
   });
 
   it('pushes the summary screen from the summary row', () => {

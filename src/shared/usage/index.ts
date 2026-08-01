@@ -8,3 +8,4 @@ export {
   type ModelUsage,
   type ModelBreakdownRow,
 } from './usageStore';
+export { getUsage, type UsageResponse } from './usageApi';

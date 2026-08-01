@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import AboutScreen from '../screens/AboutScreen';
@@ -10,7 +10,7 @@ import TermsScreen from '../screens/TermsScreen';
 
 import { initI18n } from '@/shared/i18n';
 import { usePlanStore } from '@/shared/plan';
-import { useProfileStore } from '@/shared/profile';
+import { refreshProfile, updateProfile, useProfileStore } from '@/shared/profile';
 import { THEMES, ThemeProvider, useThemeStore, type ThemeMode } from '@/shared/theme';
 
 /*
@@ -31,6 +31,20 @@ jest.mock('expo-router', () => ({
     canGoBack: () => true,
   }),
 }));
+
+jest.mock('@/services/logout', () => ({ logoutCurrentSession: jest.fn(() => Promise.resolve()) }));
+const { logoutCurrentSession: logoutMock } = jest.requireMock('@/services/logout') as {
+  logoutCurrentSession: jest.Mock;
+};
+
+jest.mock('@/shared/profile', () => ({
+  ...jest.requireActual('@/shared/profile'),
+  refreshProfile: jest.fn(),
+  updateProfile: jest.fn(),
+}));
+
+const refreshProfileMock = refreshProfile as jest.MockedFunction<typeof refreshProfile>;
+const updateProfileMock = updateProfile as jest.MockedFunction<typeof updateProfile>;
 
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -53,6 +67,7 @@ beforeEach(() => {
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
+  logoutMock.mockClear();
   usePlanStore.setState({ plan: 'free', hasHydrated: true });
   useThemeStore.setState({ preference: 'system', hasHydrated: true });
   useProfileStore.setState({
@@ -62,6 +77,18 @@ beforeEach(() => {
     avatarUri: null,
     hasHydrated: true,
   });
+  refreshProfileMock.mockResolvedValue({
+    name: 'Mahfuzur Rahman',
+    email: 'example@gmail.com',
+    phone: '+880 1711 234 567',
+    avatarUri: null,
+  });
+  updateProfileMock.mockImplementation(async (patch) => ({
+    name: patch.name ?? useProfileStore.getState().name,
+    email: patch.email ?? useProfileStore.getState().email,
+    phone: patch.phone ?? useProfileStore.getState().phone,
+    avatarUri: patch.avatarUri ?? useProfileStore.getState().avatarUri,
+  }));
 });
 
 describe('profile hub', () => {
@@ -146,6 +173,15 @@ describe('profile hub', () => {
     fireEvent.press(screen.getByTestId('settings-about'));
     expect(mockPush).toHaveBeenCalledWith('/about');
   });
+
+  it('revokes the session and replaces the app with onboarding on logout', async () => {
+    renderScreen(<ProfileScreen />);
+
+    fireEvent.press(screen.getByTestId('settings-logout'));
+
+    await waitFor(() => expect(logoutMock).toHaveBeenCalledTimes(1));
+    expect(mockReplace).toHaveBeenCalledWith('/onboarding');
+  });
 });
 
 describe('edit profile', () => {
@@ -161,13 +197,18 @@ describe('edit profile', () => {
     expect(mockBack).toHaveBeenCalled();
   });
 
-  it('commits on Save and pops back', () => {
+  it('commits on Save and pops back', async () => {
     renderScreen(<EditProfileScreen />);
 
     fireEvent.changeText(screen.getByTestId('profile-name'), '  Hamad  ');
     fireEvent.press(screen.getByTestId('profile-save'));
 
-    expect(useProfileStore.getState().name).toBe('Hamad');
+    await waitFor(() => expect(useProfileStore.getState().name).toBe('Hamad'));
+    expect(updateProfileMock).toHaveBeenCalledWith({
+      name: 'Hamad',
+      email: 'example@gmail.com',
+      phone: '+880 1711 234 567',
+    });
     expect(mockBack).toHaveBeenCalled();
   });
 
@@ -184,13 +225,26 @@ describe('edit profile', () => {
     expect(screen.getByTestId('profile-save').props.accessibilityState.disabled).toBe(false);
   });
 
-  it('commits the phone number on Save', () => {
+  it('commits the phone number on Save', async () => {
     renderScreen(<EditProfileScreen />);
 
     fireEvent.changeText(screen.getByTestId('profile-phone'), '+971 50 123 4567');
     fireEvent.press(screen.getByTestId('profile-save'));
 
-    expect(useProfileStore.getState().phone).toBe('+971 50 123 4567');
+    await waitFor(() =>
+      expect(useProfileStore.getState().phone).toBe('+971 50 123 4567'),
+    );
+  });
+
+  it('keeps the form open and shows an error when the backend rejects Save', async () => {
+    updateProfileMock.mockRejectedValueOnce(new Error('network'));
+    renderScreen(<EditProfileScreen />);
+    fireEvent.changeText(screen.getByTestId('profile-name'), 'Updated Name');
+    fireEvent.press(screen.getByTestId('profile-save'));
+
+    await waitFor(() => expect(screen.getByTestId('profile-save-error')).toBeTruthy());
+    expect(mockBack).not.toHaveBeenCalled();
+    expect(useProfileStore.getState().name).toBe('Mahfuzur Rahman');
   });
 });
 

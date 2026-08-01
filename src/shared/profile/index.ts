@@ -8,3 +8,4 @@ export {
   type Profile,
   type ProfileState,
 } from './profileStore';
+export { getProfile, updateProfile, refreshProfile } from './profileApi';

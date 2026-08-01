@@ -13,9 +13,8 @@ import { createJSONStorage, persist } from 'zustand/middleware';
  * (`chat.drawer.accountName`), which made a person's name a translatable
  * constant — wrong in every language.
  *
- * TODO(backend): the profile belongs to the session endpoint; this store then
- * caches it (TanStack Query) and `saveProfile` becomes a PATCH. Nothing here is
- * a credential, so AsyncStorage is the right home — passwords and tokens go to
+ * The backend owns the profile; this persisted store is the fast local cache.
+ * Nothing here is a credential, so AsyncStorage is the right home — passwords and tokens go to
  * react-native-keychain (mobile/CLAUDE.md).
  */
 export const PROFILE_STORAGE_KEY = 'oneai.profile';
@@ -31,35 +30,29 @@ export type Profile = {
 
 export type ProfileState = Profile & {
   hasHydrated: boolean;
-  /** Merge a partial edit (the edit screen submits name + email only). */
+  /** Merge a canonical server response or a partial session identity. */
   saveProfile: (patch: Partial<Profile>) => void;
+  replaceProfile: (profile: Profile) => void;
 };
 
 /*
- * Seeded from the Figma mock so the screens have something to render before the
- * backend exists. Replace with empty strings the moment the session endpoint
- * lands — a fake name shown to a real user is worse than a blank one.
- *
- * TODO(backend-session): ticket MUST land before any production / EAS build
- * submission. The seeded name and email are visible in the chat drawer and
- * profile screen — if users download a build that still shows
- * "Mahfuzur Rahman / example@gmail.com" we'll have to push a hotfix.
- * Also tied to PROGRESS.md "Action item for backend integration" — when auth
- * lands, session/profile/keychain all move together.
+ * Empty until login/registration supplies the session identity. The profile
+ * endpoint then refreshes all fields, avoiding fake personal data during boot.
  */
-const MOCK_PROFILE: Profile = {
-  name: 'Mahfuzur Rahman',
-  email: 'example@gmail.com',
+const EMPTY_PROFILE: Profile = {
+  name: '',
+  email: '',
   avatarUri: null,
-  phone: '+880 1711 234 567',
+  phone: '',
 };
 
 export const useProfileStore = create<ProfileState>()(
   persist(
     (set) => ({
-      ...MOCK_PROFILE,
+      ...EMPTY_PROFILE,
       hasHydrated: false,
       saveProfile: (patch) => set(patch),
+      replaceProfile: (profile) => set(profile),
     }),
     {
       name: PROFILE_STORAGE_KEY,

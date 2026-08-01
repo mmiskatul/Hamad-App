@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,7 +12,7 @@ import UsageGauge from '../components/UsageGauge';
 import { formatCompact, formatCount, formatMonthLabel, formatPercent } from '@/shared/format';
 import { usePlan, useCanUpgrade } from '@/shared/plan';
 import { useTheme } from '@/shared/theme';
-import { modelBreakdown, usageRatio, useUsageStore, PLAN_LIMITS } from '@/shared/usage';
+import { getUsage, modelBreakdown, usageRatio, useUsageStore, PLAN_LIMITS } from '@/shared/usage';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import AppButton from '@/shared/ui/AppButton';
 import { AppText } from '@/shared/ui/AppText';
@@ -26,12 +26,8 @@ import ScreenHeader from '@/shared/ui/ScreenHeader';
  * Three cards at 358 wide: the current tier with its upgrade CTA, two
  * semi-circle meters for requests and tokens, and a per-model breakdown.
  *
- * The numbers come from @/shared/usage, which nothing writes yet — a fresh
- * install therefore shows zeroes and empty bars. That is the HONEST state, not
- * a bug and not a reason to seed fake data: the server is the only thing that
- * can count a request, so anything shown before that endpoint exists would be
- * a lie the user cannot correct. The layout is final; wiring the endpoint fills
- * it with no changes here.
+ * The numbers come from the authenticated usage endpoint and are cached in
+ * @/shared/usage. A fresh account honestly shows zeroes and empty bars.
  *
  * The upgrade CTA is absent, not disabled, for anyone already paying — the same
  * `useCanUpgrade()` gate as the chat hero chip and the upsell dialog.
@@ -56,6 +52,19 @@ export default function UsageDashboardScreen(): React.JSX.Element {
   const requests = useUsageStore((state) => state.requests);
   const tokens = useUsageStore((state) => state.tokens);
   const byModel = useUsageStore(useShallow((state) => state.byModel));
+
+  useEffect(() => {
+    getUsage().then((usage) => {
+      useUsageStore.getState().setUsage({
+        periodStart: Date.parse(usage.periodStart),
+        requests: usage.requests,
+        tokens: usage.tokens,
+        byModel: usage.byModel,
+      });
+    }).catch(() => {
+      // The last server snapshot remains readable while offline.
+    });
+  }, []);
 
   const limits = PLAN_LIMITS[plan];
   const breakdown = useMemo(() => modelBreakdown(byModel), [byModel]);

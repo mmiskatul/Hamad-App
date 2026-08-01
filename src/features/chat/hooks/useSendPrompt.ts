@@ -25,7 +25,7 @@ import { useTranslation } from '@/shared/i18n/useTranslation';
  *     `useCallback` deps keeps the callback stable across re-renders.
  */
 export function useSendPrompt(targetId: string | null) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const controllerRef = useRef<AbortController | null>(null);
 
   // Abort on unmount — otherwise a resolved reply would race back into
@@ -44,13 +44,23 @@ export function useSendPrompt(targetId: string | null) {
 
       const newActiveId = targetId ?? useChatStore.getState().activeId;
       if (!newActiveId) return;
+      const state = useChatStore.getState();
+      const conversation = state.conversations.find((item) => item.id === newActiveId);
+      const clientMessageId = conversation?.messages.at(-1)?.id;
+      if (!clientMessageId) return;
 
       // Cancel the previous reply so the new one wins cleanly.
       controllerRef.current?.abort();
       const controller = new AbortController();
       controllerRef.current = controller;
 
-      requestReply(message, { signal: controller.signal })
+      requestReply(message, {
+        conversationId: newActiveId,
+        clientMessageId,
+        modelId: state.model,
+        responseLanguage: i18n.language.startsWith('ar') ? 'ar' : 'en',
+        signal: controller.signal,
+      })
         .then((reply) => {
           if (controllerRef.current === controller) {
             useChatStore.getState().receiveReply(newActiveId, reply);
@@ -66,7 +76,7 @@ export function useSendPrompt(targetId: string | null) {
           }
         });
     },
-    [targetId, t],
+    [i18n.language, targetId, t],
   );
 
   return onSend;

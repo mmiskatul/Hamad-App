@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,12 +17,13 @@ import ProfileAvatar from '../components/ProfileAvatar';
 import SettingRow from '../components/SettingRow';
 
 import { usePlan } from '@/shared/plan';
-import { useProfileStore } from '@/shared/profile';
+import { refreshProfile, useProfileStore } from '@/shared/profile';
 import { useTheme, useThemeStore, type ThemePreference } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import { AppText } from '@/shared/ui/AppText';
 import LanguageToggle from '@/shared/ui/LanguageToggle';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
+import { logoutCurrentSession } from '@/services/logout';
 
 /*
  * Profile / settings hub (Figma 140:1461).
@@ -41,8 +42,8 @@ import ScreenHeader from '@/shared/ui/ScreenHeader';
  * surfaces, for the same reason: two open accordions in an 8-row list means the
  * row you tapped scrolls off screen.
  *
- * TODO(backend): Memory, Usage Dashboard and Change Password are wired to their
- * screens as those batches land; sign-out needs the session module.
+ * Language and Appearance are deliberately device-local preferences. Memory,
+ * Usage, Change Password, profile data, and logout use authenticated backend APIs.
  */
 const CONTENT_WIDTH = 371;
 const ROW_GAP = 12;
@@ -61,6 +62,15 @@ export default function ProfileScreen(): React.JSX.Element {
   const plan = usePlan();
 
   const [panel, setPanel] = useState<Panel>('none');
+  const [loggingOut, setLoggingOut] = useState(false);
+
+  useEffect(() => {
+    // Persisted values paint immediately; the server then replaces them with
+    // the authenticated account's current profile (including phone/avatar).
+    refreshProfile().catch(() => {
+      // Keep the cached profile usable while offline. Editing surfaces errors.
+    });
+  }, []);
 
   const toggle = useCallback(
     (next: Exclude<Panel, 'none'>) => setPanel((current) => (current === next ? 'none' : next)),
@@ -210,11 +220,14 @@ export default function ProfileScreen(): React.JSX.Element {
             label={t('settings.rows.logout')}
             trailing="logout"
             testID="settings-logout"
-            onPress={() => {
-              // TODO(backend): clear the keychain session, then land on
-              // /onboarding. The prototype points this at the chat screen
-              // (140:1672 -> 136:2246), which cannot be right — signing out
-              // must not leave you inside the app.
+            onPress={loggingOut ? undefined : async () => {
+              setLoggingOut(true);
+              try {
+                await logoutCurrentSession();
+              } finally {
+                router.replace('/onboarding');
+                setLoggingOut(false);
+              }
             }}
           />
         </View>
@@ -245,7 +258,9 @@ function AppearanceChoices(): React.JSX.Element {
             <AppearanceChoice
               label={t(`settings.appearance.${option}`)}
               active={active}
-              onPress={() => setPreference(option)}
+              onPress={() => {
+                setPreference(option);
+              }}
               testID={`appearance-${option}`}
             />
           </View>

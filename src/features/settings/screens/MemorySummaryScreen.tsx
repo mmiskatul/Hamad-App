@@ -13,6 +13,7 @@ import { AppText } from '@/shared/ui/AppText';
 import ConfirmDialog from '@/shared/ui/ConfirmDialog';
 import IconPillButton from '@/shared/ui/IconPillButton';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
+import { appendMemorySummary, clearMemorySummary } from '../api/settingsApi';
 
 /*
  * Memory summary (Figma 187:824) — what the assistant currently believes about
@@ -48,17 +49,25 @@ export default function MemorySummaryScreen(): React.JSX.Element {
   const updatedAt = useMemoryStore((state) => state.summaryUpdatedAt);
   const appendSummary = useMemoryStore((state) => state.appendSummary);
   const clearSummary = useMemoryStore((state) => state.clearSummary);
+  const replaceMemory = useMemoryStore((state) => state.replaceMemory);
 
   const [draft, setDraft] = useState('');
   const [confirming, setConfirming] = useState(false);
 
   const canSend = draft.trim().length > 0;
 
-  const onSend = useCallback(() => {
+  const onSend = useCallback(async () => {
     if (!canSend) return;
-    appendSummary(draft);
+    const text = draft;
+    appendSummary(text);
     setDraft('');
-  }, [canSend, appendSummary, draft]);
+    try {
+      const memory = await appendMemorySummary(text);
+      replaceMemory({ ...memory, summaryUpdatedAt: memory.summaryUpdatedAt ? Date.parse(memory.summaryUpdatedAt) : null });
+    } catch {
+      // The optimistic local note remains visible and can be retried later.
+    }
+  }, [canSend, appendSummary, replaceMemory, draft]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>
@@ -166,7 +175,12 @@ export default function MemorySummaryScreen(): React.JSX.Element {
         title={t('settings.memory.clearTitle')}
         body={t('settings.memory.clearBody')}
         confirmLabel={t('settings.memory.clear')}
-        onConfirm={clearSummary}
+        onConfirm={() => {
+          clearSummary();
+          clearMemorySummary().catch(() => {
+            // Clearing remains reflected locally; a later refresh reconciles the server.
+          });
+        }}
         onDismiss={() => setConfirming(false)}
         testID="memory-clear-confirm"
       />

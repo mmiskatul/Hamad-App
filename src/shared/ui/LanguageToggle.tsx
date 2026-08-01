@@ -70,7 +70,6 @@ export default function LanguageToggle({
   const pick = useCallback(
     (lng: SupportedLanguage) => {
       if (lng === current) return;
-      // Fire and forget; changeLanguage handles the reload when direction flips.
       changeLanguage(lng).catch(() => {
         /* swallow — toggle is best-effort; i18next falls back to the key on failure */
       });

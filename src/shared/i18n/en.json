@@ -64,7 +64,9 @@
       "subtitle": "Set your new password to continue",
       "currentPlaceholder": "Current Password",
       "currentRequired": "Enter your current password",
-      "sameAsCurrent": "New password must be different from the current one"
+      "sameAsCurrent": "New password must be different from the current one",
+      "currentIncorrect": "The current password is incorrect",
+      "failed": "We couldn't change your password. Please try again."
     },
     "newPassword": {
       "title": "New password",
@@ -114,7 +116,8 @@
       "changePhoto": "Change profile photo",
       "name": "Name",
       "email": "Email",
-      "phone": "Phone"
+      "phone": "Phone",
+      "saveError": "We couldn't update your profile. Please try again."
     },
     "rows": {
       "language": "Language",
@@ -133,6 +136,7 @@
     },
     "about": {
       "title": "About",
+      "version": "Version {{version}}",
       "terms": "Terms of Use",
       "privacy": "Privacy Policy",
       "support": "Contact Support"

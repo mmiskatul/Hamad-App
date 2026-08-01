@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { File02Icon, HeadsetIcon, Shield01Icon } from '@hugeicons/core-free-icons';
@@ -8,6 +8,8 @@ import SettingRow from '../components/SettingRow';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
+import { AppText } from '@/shared/ui/AppText';
+import { getAbout, type AboutResponse } from '../api/settingsApi';
 
 /*
  * About (Figma 140:1726): the same header + row list as Profile, with the three
@@ -26,6 +28,13 @@ export default function AboutScreen(): React.JSX.Element {
   const theme = useTheme();
   const { t } = useTranslation();
   const router = useRouter();
+  const [about, setAbout] = useState<AboutResponse | null>(null);
+
+  useEffect(() => {
+    getAbout().then(setAbout).catch(() => {
+      // Legal and support navigation remain available if the API is offline.
+    });
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>
@@ -40,6 +49,28 @@ export default function AboutScreen(): React.JSX.Element {
             paddingHorizontal: theme.space.lg,
           }}
         >
+          <View
+            style={{
+              alignItems: 'center',
+              gap: theme.space.xs,
+              padding: theme.space.lg,
+              borderRadius: theme.radius.lg,
+              backgroundColor: theme.color.surface,
+            }}
+            testID="about-app-info"
+          >
+            <AppText style={{ ...theme.type.h4, color: theme.color.textPrimary }}>
+              {about?.name ?? 'OneAI Hub'}
+            </AppText>
+            <AppText style={{ ...theme.type.caption, color: theme.color.textSecondary }}>
+              {t('settings.about.version', { version: about?.version ?? '1.0.0' })}
+            </AppText>
+            {about ? (
+              <AppText style={{ ...theme.type.caption, color: theme.color.textSecondary }}>
+                {about.supportEmail}
+              </AppText>
+            ) : null}
+          </View>
           <SettingRow
             icon={File02Icon}
             label={t('settings.about.terms')}

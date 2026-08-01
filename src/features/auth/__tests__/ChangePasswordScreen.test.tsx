@@ -24,6 +24,12 @@ import { ThemeProvider } from '@/shared/theme';
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockCanGoBack = jest.fn(() => true);
+jest.mock('../api/changePassword', () => ({
+  changePassword: jest.fn(() => Promise.resolve()),
+}));
+const { changePassword: mockChangePassword } = jest.requireMock('../api/changePassword') as {
+  changePassword: jest.Mock;
+};
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     back: mockBack,
@@ -64,6 +70,7 @@ beforeEach(() => {
   mockBack.mockClear();
   mockReplace.mockClear();
   mockCanGoBack.mockReturnValue(true);
+  mockChangePassword.mockClear();
 });
 
 it('renders the three fields from the design', () => {

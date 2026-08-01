@@ -6,13 +6,14 @@ import { Camera01Icon } from '@hugeicons/core-free-icons';
 
 import ProfileAvatar from '../components/ProfileAvatar';
 
-import { useProfileStore } from '@/shared/profile';
+import { updateProfile, useProfileStore } from '@/shared/profile';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
 import AppButton from '@/shared/ui/AppButton';
 import TextField from '@/shared/ui/TextField';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
+import { AppText } from '@/shared/ui/AppText';
 
 /*
  * Edit profile (Figma 142:877): title header, 92pt avatar with a CAMERA badge,
@@ -42,10 +43,15 @@ export default function EditProfileScreen(): React.JSX.Element {
   const [name, setName] = useState(profileName);
   const [email, setEmail] = useState(profileEmail);
   const [phone, setPhone] = useState(profilePhone);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const dirty =
     name !== profileName || email !== profileEmail || phone !== profilePhone;
-  const valid = name.trim().length > 0;
+  const valid =
+    name.trim().length > 0 &&
+    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
+    phone.trim().length <= 30;
 
   const onCancel = useCallback(() => {
     if (router.canGoBack()) {
@@ -55,11 +61,23 @@ export default function EditProfileScreen(): React.JSX.Element {
     router.replace('/profile');
   }, [router]);
 
-  const onSave = useCallback(() => {
-    // TODO(backend): PATCH the profile; the store then caches the response.
-    saveProfile({ name: name.trim(), email: email.trim(), phone: phone.trim() });
-    onCancel();
-  }, [saveProfile, name, email, phone, onCancel]);
+  const onSave = useCallback(async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateProfile({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+      });
+      saveProfile(updated);
+      onCancel();
+    } catch {
+      setError(t('settings.profile.saveError'));
+    } finally {
+      setSaving(false);
+    }
+  }, [saveProfile, name, email, phone, onCancel, t]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>
@@ -117,6 +135,15 @@ export default function EditProfileScreen(): React.JSX.Element {
               />
             </View>
 
+            {error ? (
+              <AppText
+                testID="profile-save-error"
+                style={{ ...theme.type.caption, color: theme.color.danger }}
+              >
+                {error}
+              </AppText>
+            ) : null}
+
             <View style={{ flexDirection: 'row', gap: theme.space.lg }}>
               <AppButton
                 label={t('common.cancel')}
@@ -129,6 +156,7 @@ export default function EditProfileScreen(): React.JSX.Element {
                 label={t('common.save')}
                 fill
                 disabled={!dirty || !valid}
+                loading={saving}
                 onPress={onSave}
                 testID="profile-save"
               />

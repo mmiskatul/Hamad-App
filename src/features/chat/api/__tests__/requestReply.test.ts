@@ -1,75 +1,57 @@
+import { apiRequest } from '@/shared/api/client';
 import { requestReply } from '../requestReply';
 
-/*
- * The canned-reply stub. What matters here is the cancellation contract: a
- * caller that aborts its controller must NOT receive the resolved reply, even
- * if the underlying setTimeout has already been queued. This is the behaviour
- * the conversation screen relies on to avoid a stale reply landing on the next
- * conversation.
- */
+jest.mock('@/shared/api/client', () => ({ apiRequest: jest.fn() }));
+
+const apiRequestMock = apiRequest as jest.MockedFunction<typeof apiRequest>;
 
 describe('requestReply', () => {
-  beforeEach(() => {
-    jest.useFakeTimers();
-  });
+  beforeEach(() => jest.clearAllMocks());
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
+  it('sends the selected model, language and stable message id to the backend', async () => {
+    apiRequestMock.mockResolvedValue({
+      assistantMessage: {
+        id: 'reply-1',
+        content: 'Backend reply',
+        modelId: 'deepseek',
+        provider: 'DeepSeek',
+        language: 'en',
+        createdAt: '2026-08-01T00:00:00.000Z',
+      },
+    });
 
-  it('resolves with the canned reply after the thinking delay', async () => {
-    const promise = requestReply('hello');
+    await expect(requestReply('hello', {
+      conversationId: 'conversation-1',
+      clientMessageId: 'message-1',
+      modelId: 'deepseek',
+      responseLanguage: 'en',
+    })).resolves.toBe('Backend reply');
 
-    jest.advanceTimersByTime(1200);
-
-    await expect(promise).resolves.toContain('organize');
-  });
-
-  it('rejects with AbortError when the signal is already aborted', async () => {
-    const controller = new AbortController();
-    controller.abort();
-
-    // The error must carry name: 'AbortError' because useSendPrompt keys on
-    // that to distinguish an aborted send from a real network failure. We
-    // can't use `instanceof DOMException` — DOMException is a Web-only API
-    // and is not present in React Native's Hermes runtime, which is why
-    // requestReply throws a plain Error with the right `name` instead.
-    const promise = requestReply('hello', { signal: controller.signal });
-    await expect(promise).rejects.toMatchObject({
-      name: 'AbortError',
-      message: 'Aborted',
+    expect(apiRequestMock).toHaveBeenCalledWith('/conversations/conversation-1/messages', {
+      method: 'POST',
+      authenticated: true,
+      signal: undefined,
+      timeoutMs: 75_000,
+      body: JSON.stringify({
+        clientMessageId: 'message-1',
+        content: 'hello',
+        modelId: 'deepseek',
+        responseLanguage: 'en',
+      }),
     });
   });
 
-  it('rejects with AbortError when aborted before the delay fires', async () => {
+  it('passes cancellation through to the authenticated API client', async () => {
     const controller = new AbortController();
-    const promise = requestReply('hello', { signal: controller.signal });
+    const abortError = new Error('Aborted');
+    abortError.name = 'AbortError';
+    apiRequestMock.mockRejectedValue(abortError);
 
-    controller.abort();
-
-    await expect(promise).rejects.toMatchObject({
-      name: 'AbortError',
-      message: 'Aborted',
-    });
-  });
-
-  it('does not reject if aborted AFTER the reply has resolved', async () => {
-    const controller = new AbortController();
-    const promise = requestReply('hello', { signal: controller.signal });
-
-    jest.advanceTimersByTime(1200);
-    await expect(promise).resolves.toContain('organize');
-
-    // Aborting after resolution must be a no-op — the listener has already
-    // removed itself, so the timer is gone and there is nothing to reject.
-    expect(() => controller.abort()).not.toThrow();
-  });
-
-  it('does not reject when the signal is missing', async () => {
-    const promise = requestReply('hello');
-
-    jest.advanceTimersByTime(1200);
-
-    await expect(promise).resolves.toContain('organize');
+    await expect(requestReply('hello', {
+      conversationId: 'conversation-1',
+      clientMessageId: 'message-1',
+      modelId: 'gpt',
+      signal: controller.signal,
+    })).rejects.toMatchObject({ name: 'AbortError' });
   });
 });
