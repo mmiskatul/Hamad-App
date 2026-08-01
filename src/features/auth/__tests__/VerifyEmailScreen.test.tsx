@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import VerifyEmailScreen from '../screens/VerifyEmailScreen';
@@ -18,6 +18,12 @@ import { ThemeProvider } from '@/shared/theme';
 
 const mockRedirect = jest.fn();
 const mockPush = jest.fn();
+const mockRequestRegistrationCode = jest.fn();
+const mockVerifyRegistrationCode = jest.fn();
+jest.mock('../api/registration', () => ({
+  requestRegistrationCode: (...args: unknown[]) => mockRequestRegistrationCode(...args),
+  verifyRegistrationCode: (...args: unknown[]) => mockVerifyRegistrationCode(...args),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
   Redirect: ({ href }: { href: string }) => {
@@ -53,10 +59,17 @@ beforeAll(async () => {
 beforeEach(() => {
   mockRedirect.mockClear();
   mockPush.mockClear();
+  mockRequestRegistrationCode.mockReset();
+  mockRequestRegistrationCode.mockResolvedValue({ sent: true });
+  mockVerifyRegistrationCode.mockReset();
+  mockVerifyRegistrationCode.mockResolvedValue({
+    verificationToken: 'verified-registration-token',
+  });
   // Reached only mid-sign-up: an unregistered email, as login would have stored.
   useAuthFlowStore.setState({
     email: 'new.person@example.com',
     registered: false,
+    verificationToken: null,
     hasHydrated: true,
   });
 });
@@ -95,14 +108,19 @@ it('ignores non-digits and caps the code at 4 characters', () => {
   expect(a11yStateOf(screen.getByTestId('verify-submit')).disabled).toBe(false);
 });
 
-it('a verified SIGN-UP code goes on to finish signing up', () => {
+it('a verified SIGN-UP code stores the server proof and goes on to finish signing up', async () => {
   useAuthFlowStore.setState({ intent: 'signup' });
   renderScreen();
 
   fireEvent.changeText(screen.getByLabelText('Verification required'), '1234');
   fireEvent.press(screen.getByTestId('verify-submit'));
 
-  expect(mockPush).toHaveBeenCalledWith('/signup');
+  await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/signup'));
+  expect(mockVerifyRegistrationCode).toHaveBeenCalledWith(
+    'new.person@example.com',
+    '1234',
+  );
+  expect(useAuthFlowStore.getState().verificationToken).toBe('verified-registration-token');
 });
 
 /*

@@ -4,7 +4,6 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import SignupScreen from '../screens/SignupScreen';
 import { MIN_PASSWORD_LENGTH } from '../screens/NewPasswordScreen';
-import { clearAccounts, isEmailRegistered } from '../api/localAccounts';
 import { useAuthFlowStore } from '../store/authFlowStore';
 import { initI18n } from '@/shared/i18n';
 import { ThemeProvider } from '@/shared/theme';
@@ -22,6 +21,10 @@ import { ThemeProvider } from '@/shared/theme';
 
 const mockReplace = jest.fn();
 const mockRedirect = jest.fn();
+const mockCreateRegistrationAccount = jest.fn();
+jest.mock('../api/registration', () => ({
+  createRegistrationAccount: (...args: unknown[]) => mockCreateRegistrationAccount(...args),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: mockReplace }),
   Redirect: ({ href }: { href: string }) => {
@@ -60,11 +63,15 @@ beforeAll(async () => {
 beforeEach(async () => {
   mockReplace.mockClear();
   mockRedirect.mockClear();
-  await clearAccounts();
+  mockCreateRegistrationAccount.mockReset();
+  mockCreateRegistrationAccount.mockResolvedValue({
+    user: { id: '1', email: EMAIL, name: 'Sam Rivera', createdAt: new Date().toISOString() },
+  });
   useAuthFlowStore.setState({
     email: EMAIL,
     registered: false,
     intent: 'signup',
+    verificationToken: 'verified-registration-token',
     hasHydrated: true,
   });
 });
@@ -100,7 +107,7 @@ it('refuses a password under the minimum length', () => {
   expect(mockReplace).not.toHaveBeenCalled();
 });
 
-it('creates the account, clears the flow and replaces with /home', async () => {
+it('creates the account through the API, clears the flow and replaces with /home', async () => {
   renderScreen();
 
   fill('Sam Rivera', VALID);
@@ -110,7 +117,12 @@ it('creates the account, clears the flow and replaces with /home', async () => {
 
   // The registry write is what makes this email take the /password branch on
   // its NEXT login — the whole point of the sign-up step.
-  expect(await isEmailRegistered(EMAIL)).toBe(true);
+  expect(mockCreateRegistrationAccount).toHaveBeenCalledWith({
+    email: EMAIL,
+    name: 'Sam Rivera',
+    password: VALID,
+    verificationToken: 'verified-registration-token',
+  });
   expect(useAuthFlowStore.getState().email).toBeNull();
 });
 
@@ -120,5 +132,14 @@ it('redirects to /login when opened with no flow in the store', () => {
   renderScreen();
 
   expect(mockRedirect).toHaveBeenCalledWith('/login');
+  expect(screen.queryByTestId('signup-name-input')).toBeNull();
+});
+
+it('returns to verification when the runtime-only proof is missing', () => {
+  useAuthFlowStore.setState({ verificationToken: null });
+
+  renderScreen();
+
+  expect(mockRedirect).toHaveBeenCalledWith('/verify-email');
   expect(screen.queryByTestId('signup-name-input')).toBeNull();
 });

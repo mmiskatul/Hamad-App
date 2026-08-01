@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AuthBackdrop from '../components/AuthBackdrop';
@@ -8,7 +8,7 @@ import AuthButton from '../components/AuthButton';
 import AuthFlowGate from '../components/AuthFlowGate';
 import AuthTextField from '../components/AuthTextField';
 import LanguageToggle from '../components/LanguageToggle';
-import { registerAccount } from '../api/localAccounts';
+import { createRegistrationAccount } from '../api/registration';
 import { useAuthFlowStore } from '../store/authFlowStore';
 import { MIN_PASSWORD_LENGTH } from './NewPasswordScreen';
 
@@ -35,11 +35,9 @@ import { AppText } from '@/shared/ui/AppText';
  * rendered rather than hidden because a form that silently decides part of its
  * own payload is worse than one that shows it.
  *
- * CREATE ACCOUNT writes the email into the local account list, which is what
- * makes the NEXT login of this address take the /password branch instead of
- * /verify-email (see api/localAccounts.ts), clears the flow, and REPLACES the
- * route with the chat home. Replace, not push: sign-up is finished, so Android
- * back from home must exit the app rather than walk back into the auth stack.
+ * CREATE ACCOUNT sends the verified email, name, password, and one-time proof
+ * to the backend. Success clears the flow and REPLACES the route with chat home,
+ * so Android Back cannot walk into a completed auth stack.
  *
  * THEME: the auth subtree follows the adaptive theme (see src/features/auth/index.ts).
  */
@@ -67,12 +65,14 @@ function SignupContent(): React.JSX.Element {
 
   // Non-null inside AuthFlowGate — the gate redirects when there is no flow.
   const email = useAuthFlowStore(state => state.email);
+  const verificationToken = useAuthFlowStore(state => state.verificationToken);
   const clearFlow = useAuthFlowStore(state => state.clearFlow);
 
   const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | undefined>(undefined);
   const [nameError, setNameError] = useState<string | undefined>(undefined);
+  const [submissionError, setSubmissionError] = useState<string | undefined>(undefined);
   const [submitting, setSubmitting] = useState(false);
 
   const onCreate = useCallback(async () => {
@@ -90,35 +90,48 @@ function SignupContent(): React.JSX.Element {
     }
     setError(undefined);
 
-    if (!email) return;
+    if (!email || !verificationToken) {
+      setSubmissionError(t('auth.signup.verifyAgain'));
+      return;
+    }
     setSubmitting(true);
     try {
-      // TODO(backend): POST { email, name, password } to create the account. The
-      // local account list is the stand-in for that row — writing it here is what
-      // makes this email take the /password branch on its next login.
-      await registerAccount(email);
+      await createRegistrationAccount({
+        email,
+        name: name.trim(),
+        password,
+        verificationToken,
+      });
       clearFlow();
       router.replace('/home');
+    } catch {
+      setSubmissionError(t('auth.signup.createError'));
     } finally {
       setSubmitting(false);
     }
-  }, [submitting, name, password, email, t, clearFlow, router]);
+  }, [submitting, name, password, email, verificationToken, t, clearFlow, router]);
 
   // Clear each field's error as soon as the user starts correcting it.
   const onChangeName = useCallback(
     (next: string) => {
       setName(next);
       if (nameError) setNameError(undefined);
+      if (submissionError) setSubmissionError(undefined);
     },
-    [nameError],
+    [nameError, submissionError],
   );
   const onChangePassword = useCallback(
     (next: string) => {
       setPassword(next);
       if (error) setError(undefined);
+      if (submissionError) setSubmissionError(undefined);
     },
-    [error],
+    [error, submissionError],
   );
+
+  if (!verificationToken) {
+    return <Redirect href="/verify-email" />;
+  }
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
@@ -187,6 +200,14 @@ function SignupContent(): React.JSX.Element {
                   />
                 </View>
 
+                {submissionError ? (
+                  <AppText
+                    accessibilityRole={'alert'}
+                    style={{ ...AUTH_TYPE.caption, color: palette.danger, textAlign: 'center' }}
+                  >
+                    {submissionError}
+                  </AppText>
+                ) : null}
                 <AuthButton
                   variant="inverse"
                   label={t('auth.signup.submit')}

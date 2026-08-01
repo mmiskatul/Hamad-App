@@ -24,7 +24,7 @@ import { createJSONStorage, persist } from 'zustand/middleware';
  *
  * PERSISTENCE (user decision): survives app restarts, so killing the app
  * mid-flow and reopening resumes where it left off. It is cleared by clearFlow()
- * — on completed auth (TODO(backend), the login/verify screens) — and overwritten
+ * — on completed auth — and overwritten
  * whenever startFlow() runs for a new email.
  *
  * HYDRATION IS ASYNC. AsyncStorage is a native round-trip, so on the very first
@@ -58,12 +58,16 @@ export type AuthFlowState = {
   registered: boolean | null;
   /** What the user is trying to do. null when no flow is in progress. */
   intent: AuthIntent | null;
+  /** One-time registration proof. Runtime-only; never written to AsyncStorage. */
+  verificationToken: string | null;
   /** False until the persisted value has been read back from AsyncStorage. */
   hasHydrated: boolean;
   /** Record the email-check result and start (or restart) the flow. */
   startFlow: (input: { email: string; registered: boolean }) => void;
   /** Switch the running flow to a password reset (the "Forgot?" link). */
   startReset: () => void;
+  /** Keep the server's one-time registration proof in memory for /signup. */
+  setVerificationToken: (token: string) => void;
   /** Drop the flow — call on completed auth or when abandoning sign-in. */
   clearFlow: () => void;
 };
@@ -74,13 +78,21 @@ export const useAuthFlowStore = create<AuthFlowState>()(
       email: null,
       registered: null,
       intent: null,
+      verificationToken: null,
       hasHydrated: false,
       startFlow: ({ email, registered }) =>
         // The intent follows from the answer: a known address is signing in, an
         // unknown one is signing up. Callers never have to pass it.
-        set({ email, registered, intent: registered ? 'signin' : 'signup' }),
-      startReset: () => set({ intent: 'reset' }),
-      clearFlow: () => set({ email: null, registered: null, intent: null }),
+        set({
+          email,
+          registered,
+          intent: registered ? 'signin' : 'signup',
+          verificationToken: null,
+        }),
+      startReset: () => set({ intent: 'reset', verificationToken: null }),
+      setVerificationToken: (verificationToken) => set({ verificationToken }),
+      clearFlow: () =>
+        set({ email: null, registered: null, intent: null, verificationToken: null }),
     }),
     {
       name: AUTH_FLOW_STORAGE_KEY,

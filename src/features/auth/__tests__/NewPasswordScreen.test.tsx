@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react-nativ
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import NewPasswordScreen, { MIN_PASSWORD_LENGTH } from '../screens/NewPasswordScreen';
-import { clearAccounts, isEmailRegistered } from '../api/localAccounts';
 import { useAuthFlowStore } from '../store/authFlowStore';
 import { initI18n } from '@/shared/i18n';
 import { ThemeProvider } from '@/shared/theme';
@@ -56,8 +55,7 @@ beforeAll(async () => {
   await initI18n();
 });
 
-beforeEach(async () => {
-  await clearAccounts();
+beforeEach(() => {
   mockReplace.mockClear();
   mockRedirect.mockClear();
   useAuthFlowStore.setState({ email: EMAIL, registered: false, hasHydrated: true });
@@ -81,7 +79,6 @@ it('rejects a password shorter than the minimum', async () => {
 
   expect(screen.getByText(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`)).toBeTruthy();
   await waitFor(() => expect(mockReplace).not.toHaveBeenCalled());
-  expect(await isEmailRegistered(EMAIL)).toBe(false);
 });
 
 it('rejects mismatched passwords', async () => {
@@ -114,7 +111,6 @@ it('clears the flow and replaces with /login, leaving the registry alone', async
   await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login'));
 
   // Resetting a password must not create an account — that is sign-up's job.
-  expect(await isEmailRegistered(EMAIL)).toBe(false);
   expect(useAuthFlowStore.getState().email).toBeNull();
 });
 

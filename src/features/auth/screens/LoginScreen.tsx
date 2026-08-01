@@ -76,7 +76,7 @@ export default function LoginScreen(): React.JSX.Element {
   const [email, setEmail] = useState(() => useAuthFlowStore.getState().email ?? '');
   const [error, setError] = useState<string | undefined>(undefined);
 
-  const onContinue = useCallback(() => {
+  const onContinue = useCallback(async () => {
     const trimmed = email.trim();
     if (!EMAIL_RE.test(trimmed)) {
       setError(t('auth.login.emailError'));
@@ -89,15 +89,13 @@ export default function LoginScreen(): React.JSX.Element {
     // The result goes into the auth-flow store FIRST and the route carries no
     // params: the destination screens read email/registered from the store, which
     // is the single source of truth for the flow and survives an app restart.
-    checkEmail.mutate(trimmed, {
-      onSuccess: ({ registered }) => {
-        startFlow({ email: trimmed, registered });
-        router.push(registered ? '/password' : '/verify-email');
-      },
-      onError: () => {
-        setError(t('auth.login.checkError'));
-      },
-    });
+    try {
+      const { registered } = await checkEmail.mutateAsync(trimmed);
+      startFlow({ email: trimmed, registered });
+      router.push(registered ? '/password' : '/verify-email');
+    } catch {
+      setError(t('auth.login.checkError'));
+    }
   }, [email, t, checkEmail, router, startFlow]);
 
   const onChangeEmail = useCallback(

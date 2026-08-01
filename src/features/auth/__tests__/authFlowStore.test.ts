@@ -13,7 +13,12 @@ import {
 
 beforeEach(async () => {
   await AsyncStorage.clear();
-  useAuthFlowStore.setState({ email: null, registered: null, hasHydrated: true });
+  useAuthFlowStore.setState({
+    email: null,
+    registered: null,
+    verificationToken: null,
+    hasHydrated: true,
+  });
 });
 
 it('records the email-check result', () => {
@@ -33,10 +38,12 @@ it('overwrites the previous flow when a different email is submitted', () => {
 
 it('clearFlow empties the flow', () => {
   useAuthFlowStore.getState().startFlow({ email: 'user@example.com', registered: true });
+  useAuthFlowStore.getState().setVerificationToken('runtime-only-token');
   useAuthFlowStore.getState().clearFlow();
 
   expect(useAuthFlowStore.getState().email).toBeNull();
   expect(useAuthFlowStore.getState().registered).toBeNull();
+  expect(useAuthFlowStore.getState().verificationToken).toBeNull();
 });
 
 it('persists email + registered + intent to AsyncStorage, and nothing else', async () => {
@@ -50,6 +57,7 @@ it('persists email + registered + intent to AsyncStorage, and nothing else', asy
   // hasHydrated is runtime-only: persisting it would restore `true` before the
   // read that is supposed to set it has happened.
   expect(persisted).not.toHaveProperty('hasHydrated');
+  expect(persisted).not.toHaveProperty('verificationToken');
 });
 
 it('restores a stored flow on rehydrate, so an app restart resumes it', async () => {

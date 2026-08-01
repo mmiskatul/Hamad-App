@@ -7,14 +7,6 @@
     "scheme": "oneaihub",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "build": {
-      "preview": {
-        "android": {
-          "buildType": "apk"
-        }
-      },
-      "production": {}
-    },
     "ios": {
       "bundleIdentifier": "com.oneaihub.app",
       "supportsTablet": false,
@@ -29,7 +21,6 @@
       "icon": "./assets/icon.png",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "monochromeImage": "./assets/adaptive-icon-monochrome.png",
         "backgroundColor": "#A05F28"
       }
     },

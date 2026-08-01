@@ -26,15 +26,16 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
 
-// The real check reads the local account list (and sleeps 400ms). Here it is
-// replaced by an in-memory registry so the SCREEN's branch is what's under test,
-// without storage or timers. localAccounts.test.ts covers the real rule.
 const mockRegisteredEmails = ['user@example.com'];
-jest.mock('../api/checkEmailRegistered', () => ({
-  checkEmailRegistered: jest.fn(async (email: string) => ({
-    email,
-    registered: mockRegisteredEmails.includes(email.trim().toLowerCase()),
-  })),
+const mockCheckEmail = jest.fn(async (email: string) => ({
+  email,
+  registered: mockRegisteredEmails.includes(email.trim().toLowerCase()),
+}));
+jest.mock('../hooks/useCheckEmail', () => ({
+  useCheckEmail: () => ({
+    mutateAsync: mockCheckEmail,
+    isPending: false,
+  }),
 }));
 
 const metrics = {
@@ -68,6 +69,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockCheckEmail.mockClear();
   useAuthFlowStore.setState({ email: null, registered: null, hasHydrated: true });
 });
 

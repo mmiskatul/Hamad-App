@@ -8,6 +8,7 @@ import AuthButton from '../components/AuthButton';
 import AuthFlowGate from '../components/AuthFlowGate';
 import LanguageToggle from '../components/LanguageToggle';
 import OtpInput from '../components/OtpInput';
+import { requestRegistrationCode, verifyRegistrationCode } from '../api/registration';
 import { useAuthFlowStore } from '../store/authFlowStore';
 
 import { useAuthPalette } from '../palette';
@@ -60,27 +61,56 @@ function VerifyEmailContent(): React.JSX.Element {
   // Non-null inside AuthFlowGate — the gate redirects when there is no flow.
   const email = useAuthFlowStore(state => state.email);
   const intent = useAuthFlowStore(state => state.intent);
+  const setVerificationToken = useAuthFlowStore(state => state.setVerificationToken);
 
   const [code, setCode] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [feedback, setFeedback] = useState<{ message: string; error: boolean } | null>(null);
   const complete = code.length === OTP_LENGTH;
 
-  const onVerify = useCallback(() => {
+  const onVerify = useCallback(async () => {
     if (!complete || !email) return;
-    // TODO(backend): verify { email, code } and only continue when the server
-    // accepts it; on failure surface an error and clear the code. The flow is
-    // NOT cleared here — the next screen still needs the email, and it is that
-    // screen's submit that finishes the journey.
-    //
     // ONE SCREEN, TWO EXITS (see authFlowStore's AuthIntent): a reset already
     // has an account and only needs a replacement password; a sign-up has no
     // account yet and must collect a name first.
-    router.push(intent === 'reset' ? '/new-password' : '/signup');
-  }, [complete, email, intent, router]);
+    if (intent === 'reset') {
+      router.push('/new-password');
+      return;
+    }
+    setSubmitting(true);
+    setFeedback(null);
+    try {
+      const result = await verifyRegistrationCode(email, code);
+      setVerificationToken(result.verificationToken);
+      router.push('/signup');
+    } catch {
+      setCode('');
+      setFeedback({ message: t('auth.verifyEmail.invalidCode'), error: true });
+    } finally {
+      setSubmitting(false);
+    }
+  }, [complete, email, code, intent, router, setVerificationToken, t]);
 
-  const onResend = useCallback(() => {
-    if (!email) return;
-    // TODO(backend): request a new OTP for `email` and start a resend cooldown.
-  }, [email]);
+  const onResend = useCallback(async () => {
+    if (!email || intent === 'reset') return;
+    setResending(true);
+    setFeedback(null);
+    try {
+      await requestRegistrationCode(email);
+      setCode('');
+      setFeedback({ message: t('auth.verifyEmail.resent'), error: false });
+    } catch {
+      setFeedback({ message: t('auth.verifyEmail.resendError'), error: true });
+    } finally {
+      setResending(false);
+    }
+  }, [email, intent, t]);
+
+  const onChangeCode = useCallback((next: string) => {
+    setCode(next);
+    setFeedback(null);
+  }, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.canvas }}>
@@ -114,9 +144,21 @@ function VerifyEmailContent(): React.JSX.Element {
               {/* Form */}
               <View style={{ gap: FORM_GAP, alignItems: 'center', width: '100%' }}>
                 <View style={{ gap: GROUP_GAP, alignItems: 'center', width: '100%' }}>
+                  {feedback ? (
+                    <AppText
+                      accessibilityRole={feedback.error ? 'alert' : undefined}
+                      style={{
+                        ...AUTH_TYPE.caption,
+                        color: feedback.error ? palette.danger : palette.accentFocus,
+                        textAlign: 'center',
+                      }}
+                    >
+                      {feedback.message}
+                    </AppText>
+                  ) : null}
                   <OtpInput
                     value={code}
-                    onChangeText={setCode}
+                    onChangeText={onChangeCode}
                     length={OTP_LENGTH}
                     autoFocus
                     onComplete={onVerify}
@@ -127,6 +169,7 @@ function VerifyEmailContent(): React.JSX.Element {
                     label={t('auth.verifyEmail.verify')}
                     onPress={onVerify}
                     disabled={!complete}
+                    loading={submitting}
                     testID="verify-submit"
                   />
                 </View>
@@ -136,7 +179,7 @@ function VerifyEmailContent(): React.JSX.Element {
                   {t('auth.verifyEmail.resendPrefix')}{' '}
                   <AppText
                     accessibilityRole="link"
-                    onPress={onResend}
+                    onPress={resending ? undefined : onResend}
                     style={{ ...AUTH_TYPE.caption, color: palette.accentFocus }}
                   >
                     {t('auth.verifyEmail.resend')}

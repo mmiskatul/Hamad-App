@@ -50,7 +50,9 @@
       "nameRequired": "Please enter your name",
       "emailLabel": "Verified email address",
       "passwordPlaceholder": "Password",
-      "submit": "Create Account"
+      "submit": "Create Account",
+      "verifyAgain": "Verify your email again before creating the account",
+      "createError": "We couldn't create your account. Please try again."
     },
     "changePassword": {
       "title": "Change password",
@@ -73,7 +75,10 @@
       "subtitle": "Enter the verification code sent to your email address",
       "verify": "Verify",
       "resendPrefix": "Didn’t receive OTP?",
-      "resend": "Resend code"
+      "resend": "Resend code",
+      "invalidCode": "That code is invalid or has expired. Request a new code and try again.",
+      "resent": "A new verification code was sent.",
+      "resendError": "We couldn't send a new code. Please try again."
     },
     "field": {
       "showPassword": "Show password",
