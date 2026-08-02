@@ -28,6 +28,11 @@ import { AppText } from './AppText';
  */
 const WORD_INTERVAL_MS = 45;
 
+/** Split into visible word-sized chunks while preserving all original whitespace. */
+export function wordChunks(text: string): string[] {
+  return text.match(/\s*\S+(?:\s+|$)/g) ?? (text ? [text] : []);
+}
+
 export type TypewriterTextProps = {
   text: string;
   /** False renders the full text at once — the default for stored messages. */
@@ -37,6 +42,8 @@ export type TypewriterTextProps = {
   intervalMs?: number;
   /** Called once the last word is on screen (including after a tap-to-skip). */
   onDone?: () => void;
+  /** Called after each newly revealed word, used to keep chat pinned to bottom. */
+  onProgress?: () => void;
   /** Announced to screen readers, which never see the partial string. */
   accessibilityLabel?: string;
   testID?: string;
@@ -48,12 +55,14 @@ export default function TypewriterText({
   style,
   intervalMs = WORD_INTERVAL_MS,
   onDone,
+  onProgress,
   accessibilityLabel,
   testID,
 }: TypewriterTextProps): React.JSX.Element {
-  // Split on whitespace but KEEP it, so the joined prefix preserves the
-  // original spacing and newlines instead of collapsing a paragraph to one line.
-  const parts = React.useMemo(() => text.split(/(\s+)/), [text]);
+  // Each interval reveals one visible word. Whitespace stays attached to its
+  // neighbouring word, preserving paragraphs without wasting every second tick
+  // on an invisible whitespace-only update.
+  const parts = React.useMemo(() => wordChunks(text), [text]);
 
   const [count, setCount] = useState(() => (animate ? 0 : parts.length));
   const doneRef = useRef(false);
@@ -82,11 +91,18 @@ export default function TypewriterText({
   // interval callback — calling a parent's setState from within a timer tick
   // that is also calling our own setState is how double-scroll bugs start.
   useEffect(() => {
-    if (count >= parts.length && !doneRef.current) {
+    // Settled history is rendered with animate=false. It must never report
+    // completion, otherwise an older message can clear the new reply's shared
+    // streaming id before that reply reveals its first word.
+    if (animate && count >= parts.length && !doneRef.current) {
       doneRef.current = true;
       onDone?.();
     }
-  }, [count, parts.length, onDone]);
+  }, [animate, count, parts.length, onDone]);
+
+  useEffect(() => {
+    if (animate && count > 0) onProgress?.();
+  }, [animate, count, onProgress]);
 
   const revealed = count >= parts.length ? text : parts.slice(0, count).join('');
   const streaming = count < parts.length;
@@ -101,7 +117,10 @@ export default function TypewriterText({
       accessibilityLabel={accessibilityLabel ?? text}
       testID={testID}
     >
-      <AppText style={style}>{revealed}</AppText>
+      <AppText style={style}>
+        {revealed}
+        {streaming ? '▍' : ''}
+      </AppText>
     </Pressable>
   );
 }

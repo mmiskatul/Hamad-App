@@ -1,12 +1,13 @@
 import { apiRequest } from '@/shared/api/client';
 import { clearAuthSession, readAuthSession } from '@/shared/auth';
+import { useMemoryStore } from '@/shared/memory';
+import { useModelStore } from '@/shared/models';
 import { DEFAULT_PLAN, usePlanStore } from '@/shared/plan';
 import { useProfileStore } from '@/shared/profile';
 import { useUsageStore } from '@/shared/usage';
 import { useAuthFlowStore } from '@/features/auth';
 import { DEFAULT_MODEL, useChatStore } from '@/features/chat';
 import { useProjectStore } from '@/features/projects';
-import { useMemoryStore } from '@/features/settings';
 
 /**
  * Revoke the current backend session and remove every account-specific cache.
@@ -42,6 +43,7 @@ function clearAccountCaches(): void {
     summary: '',
     summaryUpdatedAt: null,
   });
+  useModelStore.getState().reset();
   useChatStore.setState({
     conversations: [],
     activeId: null,
@@ -52,7 +54,13 @@ function clearAccountCaches(): void {
     streamingId: null,
     pendingProject: null,
   });
-  useProjectStore.setState({ projects: [], editingId: null, filter: 'all' });
+  useProjectStore.setState({
+    projects: [],
+    editingId: null,
+    filter: 'all',
+    isRefreshing: false,
+    error: null,
+  });
 }
 
 function startOfMonth(): number {

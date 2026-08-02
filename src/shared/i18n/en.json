@@ -297,7 +297,8 @@
       "title": "Delete chat?",
       "message": "Are you sure you want to delete this chat? Every message and history in this chat will be permanently deleted.",
       "confirm": "Delete",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "error": "Could not delete this chat. Please try again."
     },
     "history": {
       "title": "Recent Chat History",
@@ -339,6 +340,12 @@
       "headline": "Choose your AI power level",
       "perMonth": "/mo",
       "currentPlan": "Current Plan",
+      "confirmTitle": "Confirm {{plan}}",
+      "confirmBody": "Your account limits and available AI models will change to the {{plan}} plan.",
+      "confirm": "Confirm plan",
+      "cancel": "Cancel",
+      "updating": "Updating...",
+      "changeError": "Could not update your plan. Please try again.",
       "period": {
         "monthly": "Monthly",
         "annual": "Annual",
@@ -422,6 +429,7 @@
     "requestsMeter": "{{used}} / {{limit}} Req",
     "tokensMeter": "{{used}} / {{limit}} Tokens",
     "reqShort": "{{value}} Req",
-    "tokensShort": "{{value}} tk"
+    "tokensShort": "{{value}} tk",
+    "loadError": "Could not refresh usage. Showing the last saved snapshot."
   }
 }

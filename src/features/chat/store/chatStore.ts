@@ -308,7 +308,21 @@ export const useChatStore = create<ChatState>()(
       startNewChat: () => set({ activeId: null, streamingId: null, pendingProject: null }),
 
       openConversation: (id) => set({ activeId: id, streamingId: null }),
-      setModel: (model) => set({ model }),
+      setModel: (model) => {
+        const { activeId, conversations } = get();
+        set({
+          model,
+          // When a conversation is open, the model pill controls that
+          // conversation. Keep its model in sync so useSendPrompt sends the
+          // exact model shown as selected instead of the model used to create
+          // the chat.
+          conversations: activeId
+            ? conversations.map((conversation) =>
+                conversation.id === activeId ? { ...conversation, model } : conversation,
+              )
+            : conversations,
+        });
+      },
       markUpsellSeen: () => set({ upsellSeen: true }),
 
       renameConversation: (id, title) => {

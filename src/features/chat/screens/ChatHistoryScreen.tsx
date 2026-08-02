@@ -4,28 +4,25 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 
+import {
+  deleteConversation as deleteConversationRemote,
+  refreshConversations,
+  updateConversation as updateConversationRemote,
+} from '../api/conversationApi';
 import ChatHistoryRow from '../components/ChatHistoryRow';
 import ChatMenu, { type ChatMenuAction } from '../components/ChatMenu';
+import DeleteChatDialog from '../components/DeleteChatDialog';
 import RenameChatDialog from '../components/RenameChatDialog';
 import { orderedConversations, useChatStore, type Conversation } from '../store/chatStore';
 
+import { ApiError } from '@/shared/api/client';
 import { formatRowDate, formatRowTime } from '@/shared/format';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import { AppText } from '@/shared/ui/AppText';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
 
-/*
- * Recent Chat History (Figma 182:723) — the destination of the drawer's "See
- * all".
- *
- * Each conversation is its own rounded surface card: tap opens the
- * conversation; the ✕ deletes it; a long press opens the same per-chat menu
- * the drawer rows use. The OPEN conversation is the only one rendered at
- * full contrast (Figma dims the rest), so the list shows where you are.
- */
 const CONTENT_WIDTH = 370;
-/* Rough row height + gap — used only to place the long-press menu near its row. */
 const ROW_PITCH = 75;
 
 function RowGap(): React.JSX.Element {
@@ -33,7 +30,7 @@ function RowGap(): React.JSX.Element {
   return <View style={{ height: theme.space.sm }} />;
 }
 
-type Surface = 'none' | 'menu' | 'rename';
+type Surface = 'none' | 'menu' | 'rename' | 'delete';
 
 export default function ChatHistoryScreen(): React.JSX.Element {
   const theme = useTheme();
@@ -44,6 +41,7 @@ export default function ChatHistoryScreen(): React.JSX.Element {
   const conversations = useChatStore(useShallow((state) => state.conversations));
   const activeId = useChatStore((state) => state.activeId);
   const openConversation = useChatStore((state) => state.openConversation);
+  const setModel = useChatStore((state) => state.setModel);
   const deleteConversation = useChatStore((state) => state.deleteConversation);
   const renameConversation = useChatStore((state) => state.renameConversation);
   const togglePinned = useChatStore((state) => state.togglePinned);
@@ -52,17 +50,28 @@ export default function ChatHistoryScreen(): React.JSX.Element {
   const [surface, setSurface] = useState<Surface>('none');
   const [targetId, setTargetId] = useState<string | null>(null);
   const [menuTop, setMenuTop] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const ordered = useMemo(() => orderedConversations(conversations), [conversations]);
-
   const target = ordered.find((conversation) => conversation.id === targetId) ?? null;
 
   const open = useCallback(
     (conversation: Conversation) => {
       openConversation(conversation.id);
+      setModel(conversation.model);
       router.push('/conversation');
     },
-    [openConversation, router],
+    [openConversation, router, setModel],
+  );
+
+  const syncRemoteUpdate = useCallback(
+    (conversationId: string, patch: Parameters<typeof updateConversationRemote>[1]) => {
+      void updateConversationRemote(conversationId, patch).catch(() => {
+        void refreshConversations();
+      });
+    },
+    [],
   );
 
   const onAction = useCallback(
@@ -77,9 +86,12 @@ export default function ChatHistoryScreen(): React.JSX.Element {
         case 'rename':
           setSurface('rename');
           return;
-        case 'pin':
+        case 'pin': {
+          const nextPinned = !(target?.pinned ?? false);
           togglePinned(targetId);
+          syncRemoteUpdate(targetId, { pinned: nextPinned });
           break;
+        }
         case 'files':
           openConversation(targetId);
           router.push('/chat-files');
@@ -87,12 +99,13 @@ export default function ChatHistoryScreen(): React.JSX.Element {
         case 'share':
           break;
         case 'delete':
-          deleteConversation(targetId);
-          break;
+          setDeleteError(null);
+          setSurface('delete');
+          return;
       }
       setTargetId(null);
     },
-    [targetId, startNewChat, router, togglePinned, openConversation, deleteConversation],
+    [openConversation, router, startNewChat, syncRemoteUpdate, target?.pinned, targetId, togglePinned],
   );
 
   const closeSurface = useCallback(() => setSurface('none'), []);
@@ -102,11 +115,48 @@ export default function ChatHistoryScreen(): React.JSX.Element {
   }, []);
   const onRenameSubmit = useCallback(
     (title: string) => {
-      if (targetId) renameConversation(targetId, title);
+      if (!targetId) return;
+      renameConversation(targetId, title);
+      syncRemoteUpdate(targetId, { title });
       setTargetId(null);
+      setSurface('none');
     },
-    [targetId, renameConversation],
+    [renameConversation, syncRemoteUpdate, targetId],
   );
+  const requestDelete = useCallback((conversationId: string) => {
+    setTargetId(conversationId);
+    setDeleteError(null);
+    setSurface('delete');
+  }, []);
+  const onDeleteDismiss = useCallback(() => {
+    if (isDeleting) return;
+    setSurface('none');
+    setTargetId(null);
+    setDeleteError(null);
+  }, [isDeleting]);
+  const onDeleteConfirm = useCallback(async () => {
+    if (!targetId || isDeleting) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteConversationRemote(targetId);
+      deleteConversation(targetId);
+      setSurface('none');
+      setTargetId(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        deleteConversation(targetId);
+        setSurface('none');
+        setTargetId(null);
+        return;
+      }
+      setDeleteError(
+        error instanceof Error ? error.message : t('chat.deleteDialog.error'),
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [deleteConversation, isDeleting, t, targetId]);
 
   const renderItem = useCallback<ListRenderItem<Conversation>>(
     ({ item, index }) => (
@@ -122,21 +172,18 @@ export default function ChatHistoryScreen(): React.JSX.Element {
           setMenuTop(insets.top + 160 + index * ROW_PITCH);
           setSurface('menu');
         }}
-        onDelete={() => deleteConversation(item.id)}
+        onDelete={() => requestDelete(item.id)}
         testID={`history-row-${item.id}`}
       />
     ),
-    [i18n.language, activeId, open, insets.top, deleteConversation],
+    [activeId, i18n.language, insets.top, open, requestDelete],
   );
 
   const keyExtractor = useCallback((conversation: Conversation) => conversation.id, []);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>
-      <ScreenHeader
-        title={t('chat.history.title')}
-        testID="history-header"
-      />
+      <ScreenHeader title={t('chat.history.title')} testID="history-header" />
 
       {ordered.length === 0 ? (
         <View
@@ -192,6 +239,14 @@ export default function ChatHistoryScreen(): React.JSX.Element {
         title={target?.title ?? ''}
         onDismiss={onRenameDismiss}
         onSubmit={onRenameSubmit}
+      />
+
+      <DeleteChatDialog
+        visible={surface === 'delete'}
+        loading={isDeleting}
+        error={deleteError}
+        onDismiss={onDeleteDismiss}
+        onConfirm={onDeleteConfirm}
       />
     </View>
   );

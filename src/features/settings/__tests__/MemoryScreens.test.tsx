@@ -4,7 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import MemoryScreen from '../screens/MemoryScreen';
 import MemorySummaryScreen from '../screens/MemorySummaryScreen';
-import { useMemoryStore } from '../store/memoryStore';
+import { useMemoryStore } from '@/shared/memory';
 
 import { initI18n } from '@/shared/i18n';
 import { ThemeProvider, type ThemeMode } from '@/shared/theme';

@@ -38,6 +38,7 @@ export type AssistantMessageProps = {
   /** Reveal word by word — true only for the reply that just arrived. */
   animate?: boolean;
   onRevealed?: () => void;
+  onRevealProgress?: () => void;
   onRegenerate?: () => void;
   testID?: string;
 };
@@ -49,6 +50,7 @@ function AssistantMessage({
   time,
   animate = false,
   onRevealed,
+  onRevealProgress,
   onRegenerate,
   testID,
 }: AssistantMessageProps): React.JSX.Element {
@@ -83,6 +85,7 @@ function AssistantMessage({
             text={text}
             animate={animate}
             onDone={onRevealed}
+            onProgress={onRevealProgress}
             style={{ ...theme.type.body, color: theme.color.textPrimary }}
             testID={testID ? `${testID}-text` : undefined}
           />

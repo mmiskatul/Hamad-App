@@ -7,10 +7,12 @@ import { ArrowLeft01Icon, CheckmarkCircle02Icon, Zap } from '@hugeicons/core-fre
 import RequestExtraCard from '../components/RequestExtraCard';
 import { BILLING_PERIODS, PLAN_CARDS, type BillingPeriod, type PlanCard } from '../constants';
 
-import { usePlan } from '@/shared/plan';
+import { usePlan, type Plan } from '@/shared/plan';
+import { updateAccountPlan } from '@/shared/plan/planApi';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import { AppText } from '@/shared/ui/AppText';
+import Dialog from '@/shared/ui/Dialog';
 import { Icon } from '@/shared/ui/Icon';
 
 /*
@@ -51,6 +53,34 @@ export default function UpgradePlanScreen(): React.JSX.Element {
     : 'monthly';
 
   const [period, setPeriod] = useState<BillingPeriod>(initialPeriod);
+  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const [planError, setPlanError] = useState<string | null>(null);
+
+  const selectPeriod = useCallback((next: BillingPeriod) => {
+    setPeriod(next);
+    setSelectedPlan(null);
+    setPlanError(null);
+  }, []);
+
+  const selectPlan = useCallback((next: Plan) => {
+    setSelectedPlan(next);
+    setPlanError(null);
+  }, []);
+
+  const confirmPlan = useCallback(async () => {
+    if (!selectedPlan || isConfirming) return;
+    setIsConfirming(true);
+    setPlanError(null);
+    try {
+      await updateAccountPlan(selectedPlan);
+      setSelectedPlan(null);
+    } catch (error) {
+      setPlanError(error instanceof Error ? error.message : t('chat.upgrade.changeError'));
+    } finally {
+      setIsConfirming(false);
+    }
+  }, [isConfirming, selectedPlan, t]);
 
   const onBack = useCallback(() => {
     // Modal route: pop it if we can, otherwise fall back to home so a deep link
@@ -129,7 +159,7 @@ export default function UpgradePlanScreen(): React.JSX.Element {
               return (
                 <Pressable
                   key={option}
-                  onPress={() => setPeriod(option)}
+                  onPress={() => selectPeriod(option)}
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
                   style={{
@@ -166,15 +196,44 @@ export default function UpgradePlanScreen(): React.JSX.Element {
           {period === 'extra' ? (
             <RequestExtraCard />
           ) : (
-            PLAN_CARDS.map((card) => <PlanArticle key={card.id} card={card} />)
+            <>
+              {PLAN_CARDS.map((card) => (
+                <PlanArticle
+                  key={card.id}
+                  card={card}
+                  selected={selectedPlan === card.id}
+                  disabled={isConfirming}
+                  onSelect={selectPlan}
+                />
+              ))}
+            </>
           )}
         </View>
       </ScrollView>
+
+      <PlanConfirmation
+        visible={selectedPlan !== null}
+        plan={selectedPlan ?? 'free'}
+        loading={isConfirming}
+        error={planError}
+        onConfirm={confirmPlan}
+        onCancel={() => setSelectedPlan(null)}
+      />
     </View>
   );
 }
 
-function PlanArticle({ card }: { card: PlanCard }): React.JSX.Element {
+function PlanArticle({
+  card,
+  selected,
+  disabled,
+  onSelect,
+}: {
+  card: PlanCard;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: (plan: Plan) => void;
+}): React.JSX.Element {
   const theme = useTheme();
   const { t } = useTranslation();
 
@@ -189,8 +248,8 @@ function PlanArticle({ card }: { card: PlanCard }): React.JSX.Element {
       style={{
         backgroundColor: theme.color.surface,
         borderRadius: CARD_RADIUS,
-        borderWidth: emphasised ? 1.6 : 0.8,
-        borderColor: emphasised ? theme.color.borderFocus : theme.color.border,
+        borderWidth: selected || emphasised ? 1.6 : 0.8,
+        borderColor: selected || emphasised ? theme.color.borderFocus : theme.color.border,
         padding: 26,
       }}
       testID={`plan-card-${card.id}`}
@@ -248,7 +307,7 @@ function PlanArticle({ card }: { card: PlanCard }): React.JSX.Element {
         ))}
       </View>
 
-      <PlanCta plan={card.id} isCurrent={isCurrent} />
+      <PlanCta plan={card.id} isCurrent={isCurrent} selected={selected} disabled={disabled} onSelect={onSelect} />
     </View>
   );
 }
@@ -256,9 +315,15 @@ function PlanArticle({ card }: { card: PlanCard }): React.JSX.Element {
 function PlanCta({
   plan,
   isCurrent,
+  selected,
+  disabled,
+  onSelect,
 }: {
   plan: PlanCard['id'];
   isCurrent: boolean;
+  selected: boolean;
+  disabled: boolean;
+  onSelect: (plan: Plan) => void;
 }): React.JSX.Element {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -287,7 +352,9 @@ function PlanCta({
   // was previously the softer tinted variant; per request it now matches Pro).
   return (
     <Pressable
+      disabled={disabled}
       accessibilityRole="button"
+      accessibilityState={{ selected, disabled }}
       android_ripple={{ color: theme.color.accentSoft }}
       style={{
         flexDirection: 'row',
@@ -300,14 +367,92 @@ function PlanCta({
         overflow: 'hidden',
       }}
       testID={`plan-cta-${plan}`}
-      onPress={() => {
-        // TODO(backend): start the store purchase flow for this plan + period.
-      }}
+      onPress={() => onSelect(plan)}
     >
       <Icon icon={Zap} size={24} color={theme.color.textOnAccent} />
       <AppText style={{ ...theme.type.body, color: theme.color.textOnAccent }}>
         {t(`chat.upgrade.${plan}.cta`)}
       </AppText>
     </Pressable>
+  );
+}
+
+function PlanConfirmation({
+  visible,
+  plan,
+  loading,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  visible: boolean;
+  plan: Plan;
+  loading: boolean;
+  error: string | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}): React.JSX.Element {
+  const theme = useTheme();
+  const { t } = useTranslation();
+  const planName = t(`chat.plan.${plan}Name`);
+
+  return (
+    <Dialog
+      visible={visible}
+      onDismiss={loading ? () => undefined : onCancel}
+      scrimLabel={t('chat.upgrade.cancel')}
+      testID="plan-confirmation-dialog"
+    >
+      <View style={{ gap: theme.space.md }} testID="plan-confirmation">
+        <AppText style={{ ...theme.type.h4, color: theme.color.textPrimary }}>
+          {t('chat.upgrade.confirmTitle', { plan: planName })}
+        </AppText>
+        <AppText style={{ ...theme.type.body, color: theme.color.textSecondary }}>
+          {t('chat.upgrade.confirmBody', { plan: planName })}
+        </AppText>
+        {error ? (
+          <AppText
+            style={{ ...theme.type.caption, color: theme.color.danger }}
+            testID="plan-error"
+          >
+            {error}
+          </AppText>
+        ) : null}
+        <Pressable
+          disabled={loading}
+          accessibilityRole="button"
+          accessibilityState={{ disabled: loading }}
+          onPress={onConfirm}
+          style={{
+            minHeight: 52,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: theme.radius.lg,
+            backgroundColor: loading ? theme.color.muted : theme.color.accent,
+          }}
+          testID="plan-confirm"
+        >
+          <AppText
+            style={{
+              ...theme.type.body,
+              color: loading ? theme.color.textSecondary : theme.color.textOnAccent,
+            }}
+          >
+            {t(loading ? 'chat.upgrade.updating' : 'chat.upgrade.confirm')}
+          </AppText>
+        </Pressable>
+        <Pressable
+          disabled={loading}
+          accessibilityRole="button"
+          onPress={onCancel}
+          style={{ alignItems: 'center', paddingVertical: theme.space.sm }}
+          testID="plan-cancel"
+        >
+          <AppText style={{ ...theme.type.body, color: theme.color.textSecondary }}>
+            {t('chat.upgrade.cancel')}
+          </AppText>
+        </Pressable>
+      </View>
+    </Dialog>
   );
 }

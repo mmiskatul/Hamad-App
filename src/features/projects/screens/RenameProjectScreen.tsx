@@ -5,8 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Cancel01Icon } from '@hugeicons/core-free-icons';
 import { useShallow } from 'zustand/react/shallow';
 
+import { projectErrorMessage, updateProject } from '../projectApi';
 import { useProjectStore } from '../store/projectStore';
 
+import { readAuthSession } from '@/shared/auth';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
@@ -16,21 +18,6 @@ import IconPillButton from '@/shared/ui/IconPillButton';
 import RadioOption from '@/shared/ui/RadioOption';
 import TextField from '@/shared/ui/TextField';
 
-/*
- * Rename Project (Figma 152:1914): the New Project form with the name field
- * live and the memory-scope option rendered INERT at 30% opacity.
- *
- * That dimming is a real product rule, not decoration: a project's memory scope
- * decides what its chats could already read, so flipping it after the fact would
- * retroactively change what has been shared. The design shows it visible but
- * untouchable — the user can see what they chose without being able to undo it
- * here.
- *
- * FLOW STATE: the project being renamed comes from the store's `editingId`, not
- * a route param (mobile/CLAUDE.md). A deep link straight to /project-rename has
- * no project to act on, so it redirects to the list rather than rendering a form
- * whose Save would do nothing.
- */
 const CONTENT_WIDTH = 370;
 const HEADER_TOP = 22;
 const HEADER_SIZE = 52;
@@ -42,8 +29,6 @@ export default function RenameProjectScreen(): React.JSX.Element {
 
   const project = projects.find((item) => item.id === editingId) ?? null;
 
-  // Persisted stores hydrate asynchronously — never redirect off a null that
-  // has not been read from disk yet (mobile/CLAUDE.md).
   if (!hasHydrated) return <View />;
   if (!project) return <Redirect href="/projects" />;
 
@@ -64,8 +49,10 @@ function RenameProjectForm({
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const renameProject = useProjectStore((state) => state.renameProject);
+  const renameProjectLocal = useProjectStore((state) => state.renameProject);
+  const upsertProject = useProjectStore((state) => state.upsertProject);
   const setEditingId = useProjectStore((state) => state.setEditingId);
+  const setError = useProjectStore((state) => state.setError);
 
   const [name, setName] = useState(initialName);
 
@@ -79,9 +66,21 @@ function RenameProjectForm({
   }, [setEditingId, router]);
 
   const onSave = useCallback(() => {
-    renameProject(id, name);
+    renameProjectLocal(id, name);
+    setError(null);
     close();
-  }, [renameProject, id, name, close]);
+
+    void readAuthSession()
+      .then((session) => {
+        if (!session) return null;
+        return updateProject(id, { name }).then((updatedProject) => {
+          upsertProject(updatedProject);
+        });
+      })
+      .catch((saveError) => {
+        setError(projectErrorMessage(saveError, 'Could not rename the project.'));
+      });
+  }, [close, id, name, renameProjectLocal, setError, upsertProject]);
 
   const trimmed = name.trim();
   const canSave = trimmed.length > 0 && trimmed !== initialName;
@@ -117,14 +116,6 @@ function RenameProjectForm({
       </View>
 
       <KeyboardAvoider style={{ flex: 1 }}>
-        {/*
-          ScrollView, not View: with the name field, the scope description and
-          the Save CTA, the form is taller than the keyboard leaves on a small
-          phone. Without scrolling the Save button sits under the keyboard and
-          the user can't tap it. The ScrollView shrinks as the KeyboardAvoider
-          shrinks (its flex:1 contract), so the user can scroll the button into
-          view.
-        */}
         <ScrollView
           contentContainerStyle={{
             alignItems: 'center',
@@ -157,7 +148,7 @@ function RenameProjectForm({
               selected
               disabled
               onPress={() => {
-                /* inert by design — see the header */
+                /* inert by design */
               }}
               testID="rename-project-scope"
             />

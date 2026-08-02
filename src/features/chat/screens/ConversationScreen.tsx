@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MoreHorizontalIcon } from '@hugeicons/core-free-icons';
 import { useShallow } from 'zustand/react/shallow';
 
+import { deleteConversation as deleteConversationRemote } from '../api/conversationApi';
 import AssistantMessage from '../components/AssistantMessage';
 import AttachmentMenu from '../components/AttachmentMenu';
 import ChatComposer from '../components/ChatComposer';
@@ -22,7 +23,10 @@ import { findModel } from '../constants';
 import { useSendPrompt } from '../hooks/useSendPrompt';
 import { useChatStore, type ChatMessage } from '../store/chatStore';
 import { ProjectMenu, useProjectStore, type ProjectMenuAction } from '@/features/projects';
+import { deleteProject as deleteProjectRequest, projectErrorMessage, updateProject as updateProjectRequest } from '@/features/projects/projectApi';
 
+import { readAuthSession } from '@/shared/auth';
+import { ApiError } from '@/shared/api/client';
 import { formatRowTime } from '@/shared/format';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
@@ -33,7 +37,7 @@ import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
 /*
  * The conversation view (Figma 428:1424 Chat history, 144:1314 thinking, 146:1652 answered).
  *
- * Anatomy, top to bottom: menu pill, model pill, theme toggle and ⋯ menu; a
+ * Anatomy, top to bottom: menu pill, model pill, theme toggle and menu; a
  * "Project / name" breadcrumb; the transcript (user bubbles on the end edge,
  * assistant replies led by the brand mark with a thumbs / copy / regenerate row);
  * the quota chip (with warning when usage limits are exceeded); and the composer.
@@ -43,7 +47,7 @@ import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
  * different keyboard handling. Sending the first prompt from /home navigates
  * here.
  *
- * GATED ON activeId, hydration first — the chat store is persisted, so `null` on
+ * GATED ON activeId, hydration first -- the chat store is persisted, so `null` on
  * the first frame is "not read yet", not "no conversation" (mobile/CLAUDE.md).
  */
 const SCREEN_PADDING = 16;
@@ -90,8 +94,9 @@ function FreshProjectChatContent({
   // menu shown from the projects list (Figma 404:1915 / 404:1940).
   const projects = useProjectStore((s) => s.projects);
   const setEditingId = useProjectStore((s) => s.setEditingId);
-  const togglePinned = useProjectStore((s) => s.togglePinned);
-  const deleteProject = useProjectStore((s) => s.deleteProject);
+  const upsertProject = useProjectStore((s) => s.upsertProject);
+  const removeProjectRecord = useProjectStore((s) => s.removeProjectRecord);
+  const setProjectError = useProjectStore((s) => s.setError);
 
   const projectRecord = projects.find((p) => p.id === project.id) ?? null;
 
@@ -129,23 +134,57 @@ function FreshProjectChatContent({
           router.push('/project-sources');
           break;
         case 'pin':
-          togglePinned(project.id);
+          upsertProject({
+            ...(projectRecord ?? {
+              id: project.id,
+              name: project.name,
+              description: '',
+              instructions: '',
+              scope: 'default',
+              pinned: false,
+              shared: false,
+              sources: [],
+              updatedAt: Date.now(),
+            }),
+            pinned: !(projectRecord?.pinned ?? false),
+            updatedAt: Date.now(),
+          });
+          setProjectError(null);
+          void readAuthSession()
+            .then((session) => {
+              if (!session) return null;
+              return updateProjectRequest(project.id, { pinned: !(projectRecord?.pinned ?? false) }).then((updatedProject) => {
+                upsertProject(updatedProject);
+              });
+            })
+            .catch((updateError) => {
+              setProjectError(projectErrorMessage(updateError, 'Could not update the project.'));
+            });
           break;
         case 'delete':
-          deleteProject(project.id);
+          removeProjectRecord(project.id);
+          setProjectError(null);
           startNewChat();
           router.replace('/home');
+          void readAuthSession()
+            .then((session) => {
+              if (!session) return null;
+              return deleteProjectRequest(project.id);
+            })
+            .catch((deleteError) => {
+              setProjectError(projectErrorMessage(deleteError, 'Could not delete the project.'));
+            });
           break;
         case 'newChat':
-          // "New project chat" from the fresh-project menu → the New Project
+          // "New project chat" from the fresh-project menu opens the New Project
           // form. The created project becomes the active project and the
           // fresh chat wraps itself around it.
           router.push('/project-new');
           break;
         case 'files':
-          // "Files in chat" → the Files screen (Figma 184:2882). The chat
+          // "Files in chat" opens the Files screen (Figma 184:2882). The chat
           // store has no active conversation yet from this entry point, so
-          // the screen renders its empty state — the same honest answer as
+          // the screen renders its empty state -- the same honest answer as
           // on a brand-new chat.
           router.push('/chat-files');
           break;
@@ -154,7 +193,7 @@ function FreshProjectChatContent({
           break;
       }
     },
-    [project.id, setEditingId, router, togglePinned, deleteProject, startNewChat],
+    [project.id, project.name, projectRecord, removeProjectRecord, router, setEditingId, setProjectError, startNewChat, upsertProject],
   );
 
   const closeSurface = useCallback(() => setSurface('none'), []);
@@ -314,29 +353,37 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
   const openConversation = useChatStore((state) => state.openConversation);
   const startNewChat = useChatStore((state) => state.startNewChat);
 
-  // The chat may belong to a project — the three-dot then opens the project
+  // The chat may belong to a project -- the three-dot then opens the project
   // menu (Figma 404:1915 unpinned, 404:1940 pinned) instead of the chat menu.
   const projectId = conversation?.project?.id ?? null;
   const projectRecord = useProjectStore((s) =>
     projectId ? s.projects.find((p) => p.id === projectId) ?? null : null,
   );
   const setEditingId = useProjectStore((s) => s.setEditingId);
-  const toggleProjectPinned = useProjectStore((s) => s.togglePinned);
-  const deleteProject = useProjectStore((s) => s.deleteProject);
+  const upsertProject = useProjectStore((s) => s.upsertProject);
+  const removeProjectRecord = useProjectStore((s) => s.removeProjectRecord);
+  const setProjectError = useProjectStore((s) => s.setError);
 
   const [draft, setDraft] = useState('');
   const [surface, setSurface] = useState<'none' | 'drawer' | 'models' | 'attach' | 'menu' | 'plan' | 'rename' | 'delete'>('none');
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [chatDeleteError, setChatDeleteError] = useState<string | null>(null);
 
   const scrollRefFlat = useRef<FlatList<ChatMessage>>(null);
   const thinking = thinkingFor === id;
 
   // The hook handles sendPrompt + AbortController + receiveReply orchestration.
-  // `targetId=id` pins the reply to this specific conversation — a stale reply
+  // `targetId=id` pins the reply to this specific conversation -- a stale reply
   // for a previously-active conversation must never land on this one.
   const sendReply = useSendPrompt(id);
 
   const scrollToEnd = useCallback(() => {
     scrollRefFlat.current?.scrollToEnd({ animated: true });
+  }, []);
+  const followStreamingReply = useCallback(() => {
+    // Per-word animated scrolls queue up on Android and leave the list behind
+    // the response. An immediate scroll keeps the newest word above the composer.
+    scrollRefFlat.current?.scrollToEnd({ animated: false });
   }, []);
 
   const messages = conversation?.messages ?? [];
@@ -376,6 +423,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
         case 'share':
           break;
         case 'delete':
+          setChatDeleteError(null);
           setSurface('delete');
           return;
       }
@@ -388,7 +436,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
    * projects-list pattern: actions that need a target screen set `editingId`
    * and push the route; pin/delete act directly on the project store. The
    * user lands on the chat's project if the project is deleted, so the chat
-   * has to be cleared too — otherwise the breadcrumb would point at a
+   * has to be cleared too -- otherwise the breadcrumb would point at a
    * project that no longer exists.
    */
   const onProjectMenuAction = useCallback(
@@ -406,21 +454,43 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
           router.push('/project-sources');
           break;
         case 'pin':
-          toggleProjectPinned(projectId);
+          if (projectRecord) {
+            upsertProject({ ...projectRecord, pinned: !projectRecord.pinned, updatedAt: Date.now() });
+          }
+          setProjectError(null);
+          void readAuthSession()
+            .then((session) => {
+              if (!session) return null;
+              return updateProjectRequest(projectId, { pinned: !(projectRecord?.pinned ?? false) }).then((updatedProject) => {
+                upsertProject(updatedProject);
+              });
+            })
+            .catch((updateError) => {
+              setProjectError(projectErrorMessage(updateError, 'Could not update the project.'));
+            });
           break;
         case 'delete':
-          deleteProject(projectId);
+          removeProjectRecord(projectId);
+          setProjectError(null);
           deleteConversation(id);
           router.replace('/home');
+          void readAuthSession()
+            .then((session) => {
+              if (!session) return null;
+              return deleteProjectRequest(projectId);
+            })
+            .catch((deleteError) => {
+              setProjectError(projectErrorMessage(deleteError, 'Could not delete the project.'));
+            });
           break;
         case 'newChat':
-          // "New project chat" from an existing project's menu → the New
+          // "New project chat" from an existing project's menu opens the New
           // Project form. The created project becomes the active project and
           // the fresh chat wraps itself around it.
           router.push('/project-new');
           break;
         case 'files':
-          // "Files in chat" → the Files screen (Figma 184:2882). The active
+          // "Files in chat" opens the Files screen (Figma 184:2882). The active
           // conversation is already set (`id` is the open chat), so the
           // screen reads its attachments straight from the store.
           router.push('/chat-files');
@@ -430,7 +500,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
           break;
       }
     },
-    [projectId, setEditingId, router, toggleProjectPinned, deleteProject, deleteConversation, id],
+    [deleteConversation, id, projectId, projectRecord?.pinned, removeProjectRecord, router, setEditingId, setProjectError, upsertProject],
   );
 
   const closeSurface = useCallback(() => setSurface('none'), []);
@@ -489,11 +559,37 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
     (title: string) => renameConversation(id, title),
     [renameConversation, id],
   );
-  const onDeleteDismiss = useCallback(() => setSurface('none'), []);
-  const onDeleteConfirm = useCallback(() => {
-    deleteConversation(id);
-    router.replace('/home');
-  }, [deleteConversation, id, router]);
+  const onDeleteDismiss = useCallback(() => {
+    if (!isDeleting) {
+      setSurface('none');
+      setChatDeleteError(null);
+    }
+  }, [isDeleting]);
+  const onDeleteConfirm = useCallback(async () => {
+    if (isDeleting) return;
+    setIsDeleting(true);
+    setChatDeleteError(null);
+    try {
+      await deleteConversationRemote(id);
+      deleteConversation(id);
+      setSurface('none');
+      router.replace('/home');
+    } catch (error) {
+      // Older app versions could leave a chat only in local storage. A 404
+      // means the server copy is already gone, so local deletion can finish.
+      if (error instanceof ApiError && error.status === 404) {
+        deleteConversation(id);
+        setSurface('none');
+        router.replace('/home');
+        return;
+      }
+      setChatDeleteError(
+        error instanceof Error ? error.message : t('chat.deleteDialog.error'),
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [deleteConversation, id, isDeleting, router, t]);
 
   const renderItem = useCallback<ListRenderItem<ChatMessage>>(
     ({ item }) =>
@@ -509,11 +605,12 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
           time={formatRowTime(item.at, i18n.language)}
           animate={item.id === streamingId}
           onRevealed={finishStreaming}
+          onRevealProgress={item.id === streamingId ? followStreamingReply : undefined}
           onRegenerate={onRegenerate}
           testID={`message-${item.id}`}
         />
       ),
-    [i18n.language, streamingId, finishStreaming, onRegenerate],
+    [i18n.language, streamingId, finishStreaming, followStreamingReply, onRegenerate],
   );
   const ListFooter = useCallback(() => (thinking ? <ThinkingIndicator /> : null), [thinking]);
 
@@ -666,6 +763,8 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
 
       <DeleteChatDialog
         visible={surface === 'delete'}
+        loading={isDeleting}
+        error={chatDeleteError}
         onDismiss={onDeleteDismiss}
         onConfirm={onDeleteConfirm}
       />

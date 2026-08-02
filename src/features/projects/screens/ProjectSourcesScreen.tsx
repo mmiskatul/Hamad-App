@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Redirect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,8 +10,10 @@ import {
 } from '@hugeicons/core-free-icons';
 import { useShallow } from 'zustand/react/shallow';
 
+import { projectErrorMessage, removeProjectSource } from '../projectApi';
 import { useProjectStore, type Project } from '../store/projectStore';
 
+import { readAuthSession } from '@/shared/auth';
 import { formatRowDate, formatRowTime } from '@/shared/format';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
@@ -21,23 +23,6 @@ import { Icon } from '@/shared/ui/Icon';
 import MetaListRow from '@/shared/ui/MetaListRow';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
 
-/*
- * Project sources — ONE screen with two states, exactly as the file draws them:
- * 168:2002 is the pitch ("Give more context" + Add Sources) and 170:2091 is the
- * populated list. Two frames, one screen, same as the project list's empty and
- * filled states.
- *
- * FLOW STATE: the project comes from the store's `editingId`, never a route
- * param (mobile/CLAUDE.md), and hydration is checked BEFORE the redirect — a
- * persisted store reads null on the first frame, and redirecting off that would
- * bounce a user who does have a project.
- *
- * TODO(backend): both add paths (the header ⬆ and the empty state's CTA) need
- * expo-document-picker plus an upload endpoint, and download needs a signed
- * URL. They are wired to the same handler so there is one place to fill in.
- * Until then the screen shows its empty state, which is the honest answer:
- * nothing can add a source yet.
- */
 const CONTENT_WIDTH = 370;
 const PITCH_WIDTH = 312;
 const PITCH_BADGE = 44;
@@ -60,11 +45,29 @@ function ProjectSourcesContent({ project }: { project: Project }): React.JSX.Ele
   const { t, i18n } = useTranslation();
   const insets = useSafeAreaInsets();
 
-  const removeSource = useProjectStore((state) => state.removeSource);
+  const removeSourceLocal = useProjectStore((state) => state.removeSource);
+  const upsertProject = useProjectStore((state) => state.upsertProject);
+  const setError = useProjectStore((state) => state.setError);
 
   const onAdd = () => {
-    // TODO(backend): expo-document-picker → upload → addSource(project.id, …).
+    // TODO(backend): expo-document-picker -> upload -> addProjectSource(project.id, ...).
   };
+
+  const onRemove = useCallback((sourceId: string) => {
+    removeSourceLocal(project.id, sourceId);
+    setError(null);
+
+    void readAuthSession()
+      .then((session) => {
+        if (!session) return null;
+        return removeProjectSource(project.id, sourceId).then((updated) => {
+          upsertProject(updated);
+        });
+      })
+      .catch((removeError) => {
+        setError(projectErrorMessage(removeError, 'Could not remove the source.'));
+      });
+  }, [project.id, removeSourceLocal, setError, upsertProject]);
 
   const empty = project.sources.length === 0;
 
@@ -99,12 +102,6 @@ function ProjectSourcesContent({ project }: { project: Project }): React.JSX.Ele
             style={{ width: '100%', maxWidth: PITCH_WIDTH, alignItems: 'center', gap: theme.space.xl }}
             testID="sources-empty"
           >
-            {/*
-              Pitch card (Figma 168:2002): the folder badge and the pitch copy
-              share one rounded surface, so the empty state reads as a unit.
-              The Add Sources CTA sits BELOW the card (not inside) so the
-              button is its own clickable target on the canvas.
-            */}
             <View
               style={{
                 width: '100%',
@@ -171,15 +168,14 @@ function ProjectSourcesContent({ project }: { project: Project }): React.JSX.Ele
                     icon: Download01Icon,
                     label: t('projects.sources.download', { name: source.name }),
                     onPress: () => {
-                      // TODO(backend): signed URL + expo-file-system, same as
-                      // the chat files list.
+                      // TODO(backend): signed URL + expo-file-system, same as the chat files list.
                     },
                   },
                   {
                     id: 'remove',
                     icon: Cancel01Icon,
                     label: t('projects.sources.remove', { name: source.name }),
-                    onPress: () => removeSource(project.id, source.id),
+                    onPress: () => onRemove(source.id),
                   },
                 ]}
                 testID={`source-row-${source.id}`}

@@ -9,7 +9,6 @@ export type AccountMemory = {
   summaryUpdatedAt: string | null;
 };
 
-
 export type AboutResponse = {
   name: string;
   version: string;
@@ -48,4 +47,12 @@ export function clearMemorySummary(): Promise<void> {
 
 export function getAbout(): Promise<AboutResponse> {
   return apiRequest('/about');
+}
+
+export function submitSupportTicket(subject: string, message: string): Promise<void> {
+  return apiRequest('/support/tickets', {
+    authenticated: true,
+    method: 'POST',
+    body: JSON.stringify({ subject, message }),
+  });
 }

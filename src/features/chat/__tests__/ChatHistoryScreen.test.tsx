@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ChatFilesScreen from '../screens/ChatFilesScreen';
 import ChatHistoryScreen from '../screens/ChatHistoryScreen';
+import { deleteConversation as deleteConversationRemote } from '../api/conversationApi';
 import { DEFAULT_MODEL } from '../constants';
 import {
   migrateChatState,
@@ -21,9 +22,16 @@ import { ThemeProvider } from '@/shared/theme';
  */
 
 const mockPush = jest.fn();
+jest.mock('../api/conversationApi', () => ({
+  deleteConversation: jest.fn(),
+  refreshConversations: jest.fn(() => Promise.resolve([])),
+  updateConversation: jest.fn(() => Promise.resolve()),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
 }));
+
+const mockDeleteConversationRemote = jest.mocked(deleteConversationRemote);
 
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -58,6 +66,8 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockDeleteConversationRemote.mockReset();
+  mockDeleteConversationRemote.mockResolvedValue();
   useChatStore.setState({
     conversations: [],
     activeId: null,
@@ -86,13 +96,44 @@ describe('chat history', () => {
     expect(mockPush).toHaveBeenCalledWith('/conversation');
   });
 
-  it('deletes from the row action', () => {
+  it('asks for confirmation and deletes from the backend and row', async () => {
     useChatStore.setState({ conversations: [conversation()] });
     renderScreen(<ChatHistoryScreen />);
 
     fireEvent.press(screen.getByTestId('history-row-c1-delete'));
 
-    expect(useChatStore.getState().conversations).toHaveLength(0);
+    expect(screen.getByTestId('delete-chat-dialog')).toBeTruthy();
+    expect(useChatStore.getState().conversations).toHaveLength(1);
+    expect(mockDeleteConversationRemote).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('delete-chat-confirm'));
+
+    await waitFor(() => expect(mockDeleteConversationRemote).toHaveBeenCalledWith('c1'));
+    await waitFor(() => expect(useChatStore.getState().conversations).toHaveLength(0));
+  });
+
+  it('keeps the chat and confirmation open when backend deletion fails', async () => {
+    mockDeleteConversationRemote.mockRejectedValue(new Error('Delete failed'));
+    useChatStore.setState({ conversations: [conversation()] });
+    renderScreen(<ChatHistoryScreen />);
+
+    fireEvent.press(screen.getByTestId('history-row-c1-delete'));
+    fireEvent.press(screen.getByTestId('delete-chat-confirm'));
+
+    await waitFor(() => expect(screen.getByText('Delete failed')).toBeTruthy());
+    expect(screen.getByTestId('delete-chat-dialog')).toBeTruthy();
+    expect(useChatStore.getState().conversations).toHaveLength(1);
+  });
+
+  it('cancels row deletion without changing the chat', () => {
+    useChatStore.setState({ conversations: [conversation()] });
+    renderScreen(<ChatHistoryScreen />);
+
+    fireEvent.press(screen.getByTestId('history-row-c1-delete'));
+    fireEvent.press(screen.getByTestId('delete-chat-cancel'));
+
+    expect(mockDeleteConversationRemote).not.toHaveBeenCalled();
+    expect(useChatStore.getState().conversations).toHaveLength(1);
   });
 
   it('opens the per-chat menu on long press and renames through the dialog', async () => {

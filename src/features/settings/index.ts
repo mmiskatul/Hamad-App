@@ -21,4 +21,4 @@ export { default as ContactSupportScreen } from './screens/ContactSupportScreen'
 export { default as MemoryScreen } from './screens/MemoryScreen';
 export { default as MemorySummaryScreen } from './screens/MemorySummaryScreen';
 export { default as SettingRow, type SettingRowProps } from './components/SettingRow';
-export { useMemoryStore, MEMORY_STORAGE_KEY, type MemoryState } from './store/memoryStore';
+export { useMemoryStore, MEMORY_STORAGE_KEY, type MemoryState } from '@/shared/memory';

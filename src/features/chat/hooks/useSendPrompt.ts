@@ -1,15 +1,17 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useRef } from 'react';
 
+import { refreshConversation } from '../api/conversationApi';
 import { requestReply } from '../api/requestReply';
 import { useChatStore } from '../store/chatStore';
 
 import { useTranslation } from '@/shared/i18n/useTranslation';
+import { refreshUsageSnapshot } from '@/shared/usage';
 
 /*
  * The send-and-receive orchestration that the conversation screen needs.
  *
  * This used to live inline in both `FreshProjectChatContent` and
- * `ConversationContent`, and the two drifted slightly — the abort controller
+ * `ConversationContent`, and the two drifted slightly -- the abort controller
  * was a real piece of state in one and a manual `replyControllerRef` in the
  * other, and the "aborted but still resolved" race was a TODO in both. A
  * single hook freezes the contract.
@@ -19,24 +21,15 @@ import { useTranslation } from '@/shared/i18n/useTranslation';
  *     new prompt always wins over a stale one.
  *   - The resolved reply is only filed if THIS controller is still the active
  *     one. A late resolve that's already been aborted is dropped silently.
- *   - On unmount, the in-flight reply is aborted so a `receiveReply` cannot
- *     land on a conversation the user has already left.
+ *   - A request survives component unmount because sending the first prompt
+ *     replaces the fresh-chat component immediately. The captured conversation
+ *     id still pins the eventual reply to the correct chat.
  *   - The `t` dependency is `chat.conversation.error`; using a function in
  *     `useCallback` deps keeps the callback stable across re-renders.
  */
 export function useSendPrompt(targetId: string | null) {
   const { t, i18n } = useTranslation();
   const controllerRef = useRef<AbortController | null>(null);
-
-  // Abort on unmount — otherwise a resolved reply would race back into
-  // `receiveReply` for a conversation the user has already navigated away from.
-  useEffect(
-    () => () => {
-      controllerRef.current?.abort();
-      controllerRef.current = null;
-    },
-    [],
-  );
 
   const onSend = useCallback(
     (message: string) => {
@@ -49,7 +42,6 @@ export function useSendPrompt(targetId: string | null) {
       const clientMessageId = conversation?.messages.at(-1)?.id;
       if (!clientMessageId) return;
 
-      // Cancel the previous reply so the new one wins cleanly.
       controllerRef.current?.abort();
       const controller = new AbortController();
       controllerRef.current = controller;
@@ -57,13 +49,22 @@ export function useSendPrompt(targetId: string | null) {
       requestReply(message, {
         conversationId: newActiveId,
         clientMessageId,
-        modelId: state.model,
+        modelId: conversation?.model ?? state.model,
         responseLanguage: i18n.language.startsWith('ar') ? 'ar' : 'en',
+        project: conversation?.project ?? null,
         signal: controller.signal,
       })
         .then((reply) => {
           if (controllerRef.current === controller) {
             useChatStore.getState().receiveReply(newActiveId, reply);
+            // Fastify stores the assistant message and its provider token usage
+            // before returning 201, so both snapshots are authoritative now.
+            // Refresh immediately instead of waiting for an app reload or a
+            // visit to the usage dashboard.
+            void Promise.allSettled([
+              refreshConversation(newActiveId),
+              refreshUsageSnapshot(),
+            ]);
           }
         })
         .catch((error: unknown) => {
@@ -72,7 +73,9 @@ export function useSendPrompt(targetId: string | null) {
             error instanceof Error &&
             error.name !== 'AbortError'
           ) {
-            useChatStore.getState().receiveReply(newActiveId, t('chat.conversation.error'));
+            useChatStore
+              .getState()
+              .receiveReply(newActiveId, error.message || t('chat.conversation.error'));
           }
         });
     },

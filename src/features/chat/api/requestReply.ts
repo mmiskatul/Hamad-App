@@ -1,5 +1,6 @@
-import { apiRequest } from '@/shared/api/client';
+import { ApiError, apiRequest } from '@/shared/api/client';
 import type { ModelId } from '../constants';
+import type { ConversationProject } from '../store/chatStore';
 
 export type ResponseLanguage = 'auto' | 'en' | 'ar' | 'both';
 
@@ -8,6 +9,7 @@ type RequestReplyOptions = {
   clientMessageId: string;
   modelId: ModelId;
   responseLanguage?: ResponseLanguage;
+  project?: ConversationProject | null;
   signal?: AbortSignal;
 };
 
@@ -30,20 +32,35 @@ export async function requestReply(
   prompt: string,
   options: RequestReplyOptions,
 ): Promise<string> {
-  const response = await apiRequest<MessageResponse>(
-    `/conversations/${encodeURIComponent(options.conversationId)}/messages`,
-    {
-      method: 'POST',
-      authenticated: true,
-      signal: options.signal,
-      timeoutMs: 75_000,
-      body: JSON.stringify({
-        clientMessageId: options.clientMessageId,
-        content: prompt,
-        modelId: options.modelId,
-        responseLanguage: options.responseLanguage ?? 'auto',
-      }),
-    },
-  );
-  return response.assistantMessage.content;
+  const request = () => apiRequest<MessageResponse>(
+      `/conversations/${encodeURIComponent(options.conversationId)}/messages`,
+      {
+        method: 'POST',
+        authenticated: true,
+        signal: options.signal,
+        timeoutMs: 75_000,
+        body: JSON.stringify({
+          clientMessageId: options.clientMessageId,
+          content: prompt,
+          modelId: options.modelId,
+          responseLanguage: options.responseLanguage ?? 'auto',
+          ...(options.project ? { project: options.project } : {}),
+        }),
+      },
+    );
+
+  try {
+    return (await request()).assistantMessage.content;
+  } catch (error) {
+    // The endpoint is idempotent by clientMessageId. Retrying once is safe even
+    // if the first response was lost after Fastify stored the assistant reply.
+    if (isTransientReplyError(error) && !options.signal?.aborted) {
+      return (await request()).assistantMessage.content;
+    }
+    throw error;
+  }
+}
+
+function isTransientReplyError(error: unknown): error is ApiError {
+  return error instanceof ApiError && [0, 408, 502].includes(error.status);
 }

@@ -4,7 +4,7 @@ import { useProfileStore } from '@/shared/profile';
 import { usePlanStore } from '@/shared/plan';
 import { useUsageStore } from '@/shared/usage';
 import { useThemeStore } from '@/shared/theme';
-import { useMemoryStore } from '@/features/settings';
+import { useMemoryStore } from '@/shared/memory';
 import { useChatStore } from '@/features/chat';
 import { useProjectStore } from '@/features/projects';
 

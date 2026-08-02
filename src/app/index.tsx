@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Redirect } from 'expo-router';
 
-import { SplashScreen, whenAuthFlowHydrated } from '@/features/auth';
+import { restoreAuthSession, SplashScreen, whenAuthFlowHydrated } from '@/features/auth';
 import { useAppBootstrap, type BootstrapTask } from '@/shared/bootstrap';
+import type { AuthSession } from '@/shared/auth';
 
 /*
  * "/" — the splash route, and the app's entry point.
@@ -29,12 +30,18 @@ import { useAppBootstrap, type BootstrapTask } from '@/shared/bootstrap';
  *
  * Module-level constant so the array identity is stable across renders.
  */
-const BOOT_TASKS: readonly BootstrapTask[] = [whenAuthFlowHydrated];
-
 export default function SplashRoute(): React.JSX.Element {
-  const { booted } = useAppBootstrap(BOOT_TASKS);
+  const [session, setSession] = useState<AuthSession | null | undefined>(undefined);
+  const restoreSession = useCallback(async () => {
+    setSession(await restoreAuthSession());
+  }, []);
+  const bootTasks = useMemo<readonly BootstrapTask[]>(
+    () => [whenAuthFlowHydrated, restoreSession],
+    [restoreSession],
+  );
+  const { booted } = useAppBootstrap(bootTasks);
 
-  if (booted) return <Redirect href="/onboarding" />;
+  if (booted) return <Redirect href={session ? '/home' : '/onboarding'} />;
 
   return <SplashScreen />;
 }

@@ -15,19 +15,28 @@ import Dialog from '@/shared/ui/Dialog';
 export type DeleteChatDialogProps = {
   visible: boolean;
   onDismiss: () => void;
-  onConfirm: () => void;
+  onConfirm: () => void | Promise<void>;
+  loading?: boolean;
+  error?: string | null;
 };
 
 export default function DeleteChatDialog({
   visible,
   onDismiss,
   onConfirm,
+  loading = false,
+  error = null,
 }: DeleteChatDialogProps): React.JSX.Element {
   const theme = useTheme();
   const { t } = useTranslation();
 
   return (
-    <Dialog visible={visible} onDismiss={onDismiss} scrimLabel={t('common.cancel')}>
+    <Dialog
+      visible={visible}
+      onDismiss={loading ? () => undefined : onDismiss}
+      scrimLabel={t('common.cancel')}
+      testID="delete-chat-dialog"
+    >
       <View style={{ gap: theme.space.lg }}>
         <AppText style={{ ...theme.type.h4, color: theme.color.textPrimary }}>
           {t('chat.deleteDialog.title')}
@@ -37,11 +46,21 @@ export default function DeleteChatDialog({
           {t('chat.deleteDialog.message')}
         </AppText>
 
+        {error ? (
+          <AppText
+            style={{ ...theme.type.caption, color: theme.color.danger }}
+            testID="delete-chat-error"
+          >
+            {error}
+          </AppText>
+        ) : null}
+
         <View style={{ flexDirection: 'row', gap: theme.space.lg, paddingTop: theme.space.md }}>
           <AppButton
             label={t('chat.deleteDialog.cancel')}
             variant="ghost"
             fill
+            disabled={loading}
             onPress={onDismiss}
             testID="delete-chat-cancel"
           />
@@ -49,10 +68,8 @@ export default function DeleteChatDialog({
             label={t('chat.deleteDialog.confirm')}
             variant="danger"
             fill
-            onPress={() => {
-              onConfirm();
-              onDismiss();
-            }}
+            loading={loading}
+            onPress={onConfirm}
             testID="delete-chat-confirm"
           />
         </View>

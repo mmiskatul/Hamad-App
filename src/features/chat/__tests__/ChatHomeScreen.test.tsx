@@ -1,9 +1,14 @@
 import React from 'react';
 import { Dimensions, StyleSheet } from 'react-native';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ChatHomeScreen from '../screens/ChatHomeScreen';
+import {
+  deleteConversation as deleteConversationRemote,
+  refreshConversations,
+} from '../api/conversationApi';
+import { requestReply } from '../api/requestReply';
 import { DEFAULT_MODEL, findModel } from '../constants';
 import { useChatStore, UPSELL_AFTER_PROMPTS } from '../store/chatStore';
 import { initI18n } from '@/shared/i18n';
@@ -20,6 +25,16 @@ const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush }),
 }));
+jest.mock('../api/requestReply', () => ({ requestReply: jest.fn() }));
+jest.mock('../api/conversationApi', () => ({
+  deleteConversation: jest.fn(),
+  refreshConversations: jest.fn(() => Promise.resolve([])),
+  updateConversation: jest.fn(() => Promise.resolve()),
+}));
+
+const requestReplyMock = requestReply as jest.MockedFunction<typeof requestReply>;
+const deleteConversationRemoteMock = jest.mocked(deleteConversationRemote);
+const refreshConversationsMock = jest.mocked(refreshConversations);
 
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -59,6 +74,12 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockPush.mockClear();
+  requestReplyMock.mockReset();
+  requestReplyMock.mockReturnValue(new Promise(() => undefined));
+  deleteConversationRemoteMock.mockReset();
+  deleteConversationRemoteMock.mockResolvedValue();
+  refreshConversationsMock.mockReset();
+  refreshConversationsMock.mockResolvedValue([]);
   // Both are persisted stores shared across tests — reset them or the plan and
   // appearance chosen by one case leak into the next.
   usePlanStore.setState({ plan: 'free', hasHydrated: true });
@@ -71,6 +92,19 @@ beforeEach(() => {
     upsellSeen: false,
     hasHydrated: true,
   });
+});
+
+it('sends the first message to the backend using the selected model', () => {
+  useChatStore.setState({ model: 'deepseek' });
+  renderScreen();
+
+  type('Answer with DeepSeek');
+  fireEvent.press(screen.getByTestId('chat-send'));
+
+  expect(requestReplyMock).toHaveBeenCalledWith(
+    'Answer with DeepSeek',
+    expect.objectContaining({ modelId: 'deepseek' }),
+  );
 });
 
 it('renders the welcome hero, model pill and composer', () => {
@@ -171,6 +205,32 @@ describe('surfaces', () => {
     expect(screen.getByText('Weekly meal plan')).toBeTruthy();
   });
 
+  it('pulls down to refresh the drawer with updated recent chats', async () => {
+    refreshConversationsMock.mockImplementation(async () => {
+      const refreshed = {
+        id: 'refreshed-chat',
+        title: 'Updated recent message',
+        model: DEFAULT_MODEL,
+        updatedAt: 2000,
+        pinned: false,
+        project: null,
+        messages: [],
+        attachments: [],
+      };
+      useChatStore.setState({ conversations: [refreshed] });
+      return [refreshed];
+    });
+    renderScreen();
+
+    fireEvent.press(screen.getByTestId('chat-menu'));
+    await act(async () => {
+      await screen.getByTestId('drawer-recents-list').props.refreshControl.props.onRefresh();
+    });
+
+    await waitFor(() => expect(refreshConversationsMock).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText('Updated recent message')).toBeTruthy());
+  });
+
   it('closes the drawer when the scrim outside it is tapped', async () => {
     renderScreen();
 
@@ -229,6 +289,38 @@ describe('surfaces', () => {
     expect(screen.getByTestId('attachment-camera')).toBeTruthy();
     expect(screen.getByTestId('attachment-photos')).toBeTruthy();
     expect(screen.getByTestId('attachment-files')).toBeTruthy();
+  });
+
+  it('confirms and deletes a chat selected from the Home drawer', async () => {
+    useChatStore.setState({
+      conversations: [
+        {
+          id: 'drawer-chat',
+          title: 'Drawer delete target',
+          model: DEFAULT_MODEL,
+          updatedAt: 1000,
+          pinned: false,
+          project: null,
+          messages: [],
+          attachments: [],
+        },
+      ],
+    });
+    renderScreen();
+
+    fireEvent.press(screen.getByTestId('chat-menu'));
+    fireEvent(screen.getByText('Drawer delete target'), 'longPress');
+    fireEvent.press(screen.getByTestId('chat-menu-delete'));
+
+    expect(screen.getByTestId('delete-chat-dialog')).toBeTruthy();
+    expect(useChatStore.getState().conversations).toHaveLength(1);
+
+    fireEvent.press(screen.getByTestId('delete-chat-confirm'));
+
+    await waitFor(() => {
+      expect(deleteConversationRemoteMock).toHaveBeenCalledWith('drawer-chat');
+    });
+    await waitFor(() => expect(useChatStore.getState().conversations).toHaveLength(0));
   });
 });
 

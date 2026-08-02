@@ -5,8 +5,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Tick02Icon } from '@hugeicons/core-free-icons';
 import { useShallow } from 'zustand/react/shallow';
 
+import { projectErrorMessage, updateProject } from '../projectApi';
 import { useProjectStore } from '../store/projectStore';
 
+import { readAuthSession } from '@/shared/auth';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
@@ -15,18 +17,6 @@ import IconPillButton from '@/shared/ui/IconPillButton';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
 import TextField from '@/shared/ui/TextField';
 
-/*
- * Project instructions (Figma 152:1951): the persona/tone the model adopts
- * inside this project. Back pill, "Instructions" title, a ✓ commit button on
- * the end edge, an explainer, then a 224pt filled editor.
- *
- * The ✓ IS the save — there is no Cancel in the design, so leaving by Back
- * discards. That asymmetry is deliberate in the original and kept here: the
- * commit is explicit, and nothing is written per keystroke.
- *
- * FLOW STATE from the store's `editingId`, not a route param, with the same
- * hydration-safe gate as the rename screen (mobile/CLAUDE.md).
- */
 const CONTENT_WIDTH = 370;
 const HEADER_TOP = 22;
 const HEADER_SIZE = 52;
@@ -51,22 +41,34 @@ function InstructionsForm({ id, initial }: { id: string; initial: string }): Rea
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const setInstructions = useProjectStore((state) => state.setInstructions);
+  const setInstructionsLocal = useProjectStore((state) => state.setInstructions);
+  const upsertProject = useProjectStore((state) => state.upsertProject);
   const setEditingId = useProjectStore((state) => state.setEditingId);
+  const setError = useProjectStore((state) => state.setError);
 
   const [draft, setDraft] = useState(initial);
 
   const onSave = useCallback(() => {
-    // TODO(backend): PATCH the project; instructions ride along with every
-    // completion request once the chat module exists.
-    setInstructions(id, draft);
+    setInstructionsLocal(id, draft);
+    setError(null);
     setEditingId(null);
     if (router.canGoBack()) {
       router.back();
-      return;
+    } else {
+      router.replace('/projects');
     }
-    router.replace('/projects');
-  }, [setInstructions, id, draft, setEditingId, router]);
+
+    void readAuthSession()
+      .then((session) => {
+        if (!session) return null;
+        return updateProject(id, { instructions: draft }).then((updatedProject) => {
+          upsertProject(updatedProject);
+        });
+      })
+      .catch((saveError) => {
+        setError(projectErrorMessage(saveError, 'Could not save project instructions.'));
+      });
+  }, [draft, id, router, setEditingId, setError, setInstructionsLocal, upsertProject]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>

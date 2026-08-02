@@ -3,7 +3,7 @@ import { ScrollView, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ArrowUp02Icon, Delete02Icon } from '@hugeicons/core-free-icons';
 
-import { useMemoryStore } from '../store/memoryStore';
+import { useMemoryStore } from '@/shared/memory';
 
 import { formatRowTime } from '@/shared/format';
 import { useTheme } from '@/shared/theme';

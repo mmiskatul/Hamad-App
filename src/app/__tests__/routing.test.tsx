@@ -1,6 +1,8 @@
 import { screen, waitFor } from '@testing-library/react-native';
 import { renderRouter } from 'expo-router/testing-library';
 
+const mockRestoreAuthSession = jest.fn<Promise<unknown>, []>();
+
 /*
  * Route-tree contract test. Exercises the REAL src/app directory through
  * expo-router's testing renderer, so it fails if a route file is renamed, a
@@ -22,6 +24,7 @@ jest.mock('@/features/auth', () => {
     // here or boot throws. Resolves immediately: storage behaviour has its own
     // suite (authFlowStore.test.ts).
     whenAuthFlowHydrated: () => Promise.resolve(),
+    restoreAuthSession: mockRestoreAuthSession,
     SplashScreen: () => React.createElement(View, { testID: 'splash-screen' }),
     OnboardingScreen: () => React.createElement(View, { testID: 'onboarding-screen' }),
     OnboardingScreenSkeleton: () => React.createElement(View, { testID: 'onboarding-skeleton' }),
@@ -94,6 +97,10 @@ jest.mock('@/features/dashboard', () => {
 });
 
 describe('app routing', () => {
+  beforeEach(() => {
+    mockRestoreAuthSession.mockReset();
+    mockRestoreAuthSession.mockResolvedValue(null);
+  });
   /*
    * REAL timers on purpose — do NOT add jest.useFakeTimers() here.
    *
@@ -121,6 +128,17 @@ describe('app routing', () => {
       timeout: 6000,
     });
     expect(screen).toHavePathname('/onboarding');
+  }, 20000);
+
+  it('restores a persisted session and lands directly on /home', async () => {
+    mockRestoreAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
+    renderRouter('src/app', { initialUrl: '/' });
+
+    expect(screen.getByTestId('splash-screen')).toBeTruthy();
+    await waitFor(() => expect(screen.getByTestId('chat-home-screen')).toBeTruthy(), {
+      timeout: 6000,
+    });
+    expect(screen).toHavePathname('/home');
   }, 20000);
 
   it('resolves /login in the (auth) group to the login screen', async () => {

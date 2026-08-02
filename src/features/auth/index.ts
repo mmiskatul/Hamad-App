@@ -60,6 +60,7 @@
  */
 export { useAuthFlowStore, whenAuthFlowHydrated, AUTH_FLOW_STORAGE_KEY } from './store/authFlowStore';
 export type { AuthFlowState, AuthIntent } from './store/authFlowStore';
+export { restoreAuthSession } from './api/restoreSession';
 
 export { default as SplashScreen } from './screens/SplashScreen';
 export { default as OnboardingScreen } from './screens/OnboardingScreen';

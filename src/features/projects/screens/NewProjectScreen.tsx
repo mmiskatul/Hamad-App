@@ -2,9 +2,12 @@ import React, { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Cancel01Icon } from '@hugeicons/core-free-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { createProject, projectErrorMessage } from '../projectApi';
 import { useProjectStore, type ProjectScope } from '../store/projectStore';
 
+import { readAuthSession } from '@/shared/auth';
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
@@ -13,18 +16,7 @@ import { AppText } from '@/shared/ui/AppText';
 import IconPillButton from '@/shared/ui/IconPillButton';
 import RadioOption from '@/shared/ui/RadioOption';
 import TextField from '@/shared/ui/TextField';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-/*
- * New Project (Figma 144:1229): a filled name field, the memory-scope choice,
- * and a Create CTA on the inverse surface.
- *
- * The header's leading control is a ✕, NOT a back arrow — this is a modal task
- * you abandon, not a place you navigate back from, and the design says so.
- *
- * Create is disabled until the project has a name: an unnamed project produces
- * a blank row in the list with nothing to identify or tap.
- */
 const CONTENT_WIDTH = 370;
 const HEADER_TOP = 22;
 const HEADER_SIZE = 52;
@@ -37,7 +29,10 @@ export default function NewProjectScreen(): React.JSX.Element {
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
-  const createProject = useProjectStore((state) => state.createProject);
+  const createProjectLocal = useProjectStore((state) => state.createProject);
+  const upsertProject = useProjectStore((state) => state.upsertProject);
+  const removeProjectRecord = useProjectStore((state) => state.removeProjectRecord);
+  const setError = useProjectStore((state) => state.setError);
 
   const [name, setName] = useState('');
   const [scope, setScope] = useState<ProjectScope>('default');
@@ -51,15 +46,27 @@ export default function NewProjectScreen(): React.JSX.Element {
   }, [router]);
 
   const onCreate = useCallback(() => {
-    // TODO(backend): POST the project; the store then caches the response.
-    createProject({ name, scope });
+    if (name.trim().length === 0) return;
+
+    const tempId = createProjectLocal({ name, scope });
+    setError(null);
     close();
-  }, [createProject, name, scope, close]);
+
+    void readAuthSession()
+      .then((session) => {
+        if (!session) return null;
+        return createProject({ name, scope }).then((createdProject) => {
+          removeProjectRecord(tempId);
+          upsertProject(createdProject);
+        });
+      })
+      .catch((createError) => {
+        setError(projectErrorMessage(createError, 'Could not create the project.'));
+      });
+  }, [close, createProjectLocal, name, removeProjectRecord, scope, setError, upsertProject]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>
-      {/* Hand-rolled rather than ScreenHeader: the leading control is a ✕ that
-          abandons the task, not a back arrow that pops a stack. */}
       <View style={{ paddingTop: insets.top + HEADER_TOP, paddingHorizontal: theme.space.lg }}>
         <View style={{ height: HEADER_SIZE, justifyContent: 'center' }}>
           <AppText
@@ -89,14 +96,6 @@ export default function NewProjectScreen(): React.JSX.Element {
       </View>
 
       <KeyboardAvoider style={{ flex: 1 }}>
-        {/*
-          ScrollView, not View: with the name field, two radio descriptions and
-          the Create CTA, the form is taller than the keyboard leaves on a small
-          phone. Without scrolling the Create button sits under the keyboard and
-          the user can't tap it — the reported bug. The ScrollView shrinks as
-          the KeyboardAvoider shrinks (its flex:1 contract), so the user can
-          scroll the button into view.
-        */}
         <ScrollView
           contentContainerStyle={{
             alignItems: 'center',

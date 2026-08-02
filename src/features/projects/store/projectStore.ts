@@ -3,63 +3,46 @@ import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
 /*
- * Projects: named workspaces that group chats, files and instructions (Figma
- * Project 142:1070 / 151:1742, New project 144:1229, Rename 152:1914,
- * Instructions 152:1951).
+ * Projects: named workspaces that group chats, files and instructions.
  *
- * `editingId` is the FLOW STATE for the rename and instructions screens, and it
- * lives here rather than in route params on purpose (mobile/CLAUDE.md): params
- * duplicate the source of truth and let a deep link open /project-rename with
- * nothing to rename. Those screens gate on it and redirect when it is null.
- *
- * TODO(backend): projects belong to the server once the module exists; this
- * store then caches them through TanStack Query. `shared` is display-only until
- * there is a sharing endpoint — nothing in the app can set it yet.
+ * The backend is now the source of truth for project records. This store keeps
+ * the cached list plus the local flow state (`editingId`, filter chips, loading
+ * and error flags) that the project screens need to coordinate with each other.
  */
 export const PROJECT_STORAGE_KEY = 'oneai.projects';
-/* Bump with every shape change to Project, and add a migrate branch. */
 export const PROJECT_STORAGE_VERSION = 1;
 
-/** Whether a project's memory is walled off from the rest of the app. */
 export type ProjectScope = 'default' | 'project-only';
 
-/** A document, link or file added as project context (Figma 170:2091). */
 export type ProjectSource = {
   id: string;
-  /** File name as shown in the list, e.g. "name.md". */
   name: string;
-  /** Epoch ms it was added — the row's "9:48 PM • DEC 7, 2026" meta. */
   at: number;
-  /** Local or remote location. Empty until the picker and upload land. */
   uri: string;
 };
 
 export type Project = {
   id: string;
   name: string;
-  /** One-line summary under the name in the list. */
   description: string;
-  /** Persona / tone instructions for the model (Figma 152:1951). */
   instructions: string;
   scope: ProjectScope;
   pinned: boolean;
-  /** Shared with the user by someone else, rather than created by them. */
   shared: boolean;
-  /** Context documents (Figma 168:2002 empty / 170:2091 list). */
   sources: ProjectSource[];
   updatedAt: number;
 };
 
-/** List filter chips (Figma 142:1198). */
 export const PROJECT_FILTERS = ['all', 'mine', 'shared'] as const;
 export type ProjectFilter = (typeof PROJECT_FILTERS)[number];
 
 export type ProjectState = {
   projects: Project[];
-  /** The project the rename / instructions screens are acting on. */
   editingId: string | null;
   filter: ProjectFilter;
   hasHydrated: boolean;
+  isRefreshing: boolean;
+  error: string | null;
 
   createProject: (input: { name: string; scope: ProjectScope }) => string;
   renameProject: (id: string, name: string) => void;
@@ -68,6 +51,11 @@ export type ProjectState = {
   deleteProject: (id: string) => void;
   addSource: (id: string, source: { name: string; uri?: string }) => void;
   removeSource: (id: string, sourceId: string) => void;
+  replaceProjects: (projects: Project[]) => void;
+  upsertProject: (project: Project) => void;
+  removeProjectRecord: (id: string) => void;
+  setRefreshing: (isRefreshing: boolean) => void;
+  setError: (error: string | null) => void;
   setFilter: (filter: ProjectFilter) => void;
   setEditingId: (id: string | null) => void;
 };
@@ -76,15 +64,6 @@ function newId(prefix = 'p'): string {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-/*
- * v1 added `sources` to Project. Anything already on disk predates it and
- * rehydrates without the array, so the sources screen's first `.map` would
- * throw on undefined. Backfill in ONE place rather than defending at every read
- * site — the shape is honest afterwards. Same pattern, and the same reasoning,
- * as migrateChatState.
- *
- * Exported so the migration is testable without going through AsyncStorage.
- */
 export function migrateProjectState(persisted: unknown, version: number): unknown {
   const state = persisted as { projects?: Partial<Project>[] } | undefined;
   if (!state?.projects || version >= PROJECT_STORAGE_VERSION) return state;
@@ -95,6 +74,10 @@ export function migrateProjectState(persisted: unknown, version: number): unknow
   };
 }
 
+function mergeProject(projects: readonly Project[], project: Project): Project[] {
+  return [project, ...projects.filter((existing) => existing.id !== project.id)];
+}
+
 export const useProjectStore = create<ProjectState>()(
   persist(
     (set, get) => ({
@@ -102,6 +85,8 @@ export const useProjectStore = create<ProjectState>()(
       editingId: null,
       filter: 'all',
       hasHydrated: false,
+      isRefreshing: false,
+      error: null,
 
       createProject: ({ name, scope }) => {
         const project: Project = {
@@ -115,18 +100,18 @@ export const useProjectStore = create<ProjectState>()(
           sources: [],
           updatedAt: Date.now(),
         };
-        set({ projects: [project, ...get().projects] });
+        set({ projects: [project, ...get().projects], error: null });
         return project.id;
       },
 
       renameProject: (id, name) => {
         const trimmed = name.trim();
-        // A nameless project is an untappable row — reject instead of storing it.
         if (!trimmed) return;
         set({
           projects: get().projects.map((project) =>
             project.id === id ? { ...project, name: trimmed, updatedAt: Date.now() } : project,
           ),
+          error: null,
         });
       },
 
@@ -135,6 +120,7 @@ export const useProjectStore = create<ProjectState>()(
           projects: get().projects.map((project) =>
             project.id === id ? { ...project, instructions, updatedAt: Date.now() } : project,
           ),
+          error: null,
         }),
 
       togglePinned: (id) =>
@@ -142,14 +128,14 @@ export const useProjectStore = create<ProjectState>()(
           projects: get().projects.map((project) =>
             project.id === id ? { ...project, pinned: !project.pinned } : project,
           ),
+          error: null,
         }),
 
       deleteProject: (id) =>
         set({
           projects: get().projects.filter((project) => project.id !== id),
-          // Drop the pointer with the record, or the rename screen opens on a
-          // project that no longer exists.
           editingId: get().editingId === id ? null : get().editingId,
+          error: null,
         }),
 
       addSource: (id, { name, uri = '' }) => {
@@ -163,6 +149,7 @@ export const useProjectStore = create<ProjectState>()(
               ? { ...project, sources: [source, ...project.sources], updatedAt: Date.now() }
               : project,
           ),
+          error: null,
         });
       },
 
@@ -177,15 +164,25 @@ export const useProjectStore = create<ProjectState>()(
                 }
               : project,
           ),
+          error: null,
         }),
 
+      replaceProjects: (projects) => set({ projects: [...projects], error: null }),
+      upsertProject: (project) => set({ projects: mergeProject(get().projects, project), error: null }),
+      removeProjectRecord: (id) =>
+        set({
+          projects: get().projects.filter((project) => project.id !== id),
+          editingId: get().editingId === id ? null : get().editingId,
+          error: null,
+        }),
+      setRefreshing: (isRefreshing) => set({ isRefreshing }),
+      setError: (error) => set({ error }),
       setFilter: (filter) => set({ filter }),
       setEditingId: (editingId) => set({ editingId }),
     }),
     {
       name: PROJECT_STORAGE_KEY,
       storage: createJSONStorage(() => AsyncStorage),
-      // `editingId` and `filter` are per-session view state, not data.
       partialize: ({ projects }) => ({ projects }),
       version: PROJECT_STORAGE_VERSION,
       migrate: migrateProjectState,
@@ -199,10 +196,6 @@ export const useProjectStore = create<ProjectState>()(
   ),
 );
 
-/*
- * Filter + order for the list: pinned first, then most recently updated.
- * Derived on read so pinning and filtering cannot desynchronise from storage.
- */
 export function visibleProjects(
   projects: readonly Project[],
   filter: ProjectFilter,

@@ -84,3 +84,35 @@ it('rejects protected requests when no secure session exists', async () => {
   });
   expect(fetchMock).not.toHaveBeenCalled();
 });
+
+it('keeps the persisted session when refresh fails because the network is unavailable', async () => {
+  await saveAuthSession(initialSession);
+  fetchMock
+    .mockResolvedValueOnce(
+      jsonResponse({ error: { code: 'TOKEN_EXPIRED', message: 'Expired' } }, 401),
+    )
+    .mockRejectedValueOnce(new Error('Network unavailable'));
+
+  await expect(apiRequest('/auth/me', { authenticated: true })).rejects.toMatchObject({
+    status: 0,
+    code: 'NETWORK_ERROR',
+  });
+  await expect(readAuthSession()).resolves.toEqual(initialSession);
+});
+
+it('clears the persisted session when the refresh token is rejected', async () => {
+  await saveAuthSession(initialSession);
+  fetchMock
+    .mockResolvedValueOnce(
+      jsonResponse({ error: { code: 'TOKEN_EXPIRED', message: 'Expired' } }, 401),
+    )
+    .mockResolvedValueOnce(
+      jsonResponse({ error: { code: 'INVALID_SESSION', message: 'Invalid session' } }, 401),
+    );
+
+  await expect(apiRequest('/auth/me', { authenticated: true })).rejects.toMatchObject({
+    status: 401,
+    code: 'INVALID_SESSION',
+  });
+  await expect(readAuthSession()).resolves.toBeNull();
+});

@@ -13,17 +13,9 @@ import PerplexityLogo from '../../../assets/brand/perplexity.svg';
 /*
  * The six AI models the app offers, and which plan unlocks each.
  *
- * This lives in shared/ for the same reason the plan does: it is a PRODUCT fact,
- * not a chat fact. The chat model sheet picks from it, and the usage dashboard
- * names and colours every row of its model breakdown — two features, and
- * features may not import each other.
- *
- * PLAN GATING HERE IS PRESENTATION ONLY. What a user may actually call is
- * decided server-side (backend/src/ai/routing.service.ts + the usage module);
- * `minPlan` only stops the UI offering something the server will refuse.
- *
- * TODO(backend): fetch the catalogue (already filtered by the caller's plan)
- * instead of hardcoding it.
+ * This file holds the STATIC product metadata the mobile client owns: logos,
+ * colours, default copy keys and fallback ordering. Runtime availability is
+ * loaded from the backend and layered on top through shared/models/modelStore.
  */
 export type ModelId = 'gpt' | 'deepseek' | 'gemini' | 'claude' | 'perplexity' | 'grok';
 
@@ -37,25 +29,23 @@ export type ModelInfo = {
   descriptionKey: string;
   /** Lowest plan that may select it (Figma's Pro / Business lock chips). */
   minPlan: Plan;
+  /** Whether the current backend has this model configured and available. */
+  available: boolean;
   /**
    * Vendor brand colour, used for the usage dashboard's 8pt legend dot and its
-   * progress fill (Figma 140:2187 onward). These are literal brand hexes, NOT
-   * theme tokens — the point of the dot is that it identifies the vendor, so it
-   * must read the same in light and dark.
+   * progress fill. These are literal brand hexes, NOT theme tokens.
    */
   brandColor: string;
   /**
-   * Vendor brand mark (user-supplied .svg from assets/brand). Shown on the model
-   * sheet's 52pt avatar. The marks carry their own colours, so they render the
-   * same in light and dark — same principle as brandColor.
+   * Vendor brand mark (user-supplied .svg from assets/brand). Shown on the
+   * model sheet's 52pt avatar.
    */
   logo: React.FC<SvgProps>;
 };
 
 /*
  * Order and copy mirror the model sheet exactly. NOTE: the Figma row reads
- * "Perplexit" — a typo, corrected here, same standing rule as the "accoount"
- * typo in the auth section.
+ * "Perplexit" - a typo, corrected here.
  */
 export const MODELS: readonly ModelInfo[] = [
   {
@@ -64,6 +54,7 @@ export const MODELS: readonly ModelInfo[] = [
     vendor: 'OpenAI',
     descriptionKey: 'chat.models.gpt',
     minPlan: 'free',
+    available: true,
     brandColor: '#10A37F',
     logo: ChatgptLogo,
   },
@@ -73,6 +64,7 @@ export const MODELS: readonly ModelInfo[] = [
     vendor: 'DeepSeek',
     descriptionKey: 'chat.models.deepseek',
     minPlan: 'free',
+    available: true,
     brandColor: '#4D6BFE',
     logo: DeepseekLogo,
   },
@@ -82,17 +74,17 @@ export const MODELS: readonly ModelInfo[] = [
     vendor: 'Google',
     descriptionKey: 'chat.models.gemini',
     minPlan: 'pro',
+    available: true,
     brandColor: '#6C9CEB',
     logo: GeminiLogo,
   },
-  // Perplexity and Claude were swapped (position AND plan tier) per the updated
-  // Figma model sheet: Perplexity now sits at Pro, Claude at Business.
   {
     id: 'perplexity',
     name: 'Perplexity',
     vendor: 'Perplexity',
     descriptionKey: 'chat.models.perplexity',
     minPlan: 'pro',
+    available: true,
     brandColor: '#42EEF4',
     logo: PerplexityLogo,
   },
@@ -102,6 +94,7 @@ export const MODELS: readonly ModelInfo[] = [
     vendor: 'Anthropic',
     descriptionKey: 'chat.models.claude',
     minPlan: 'business',
+    available: true,
     brandColor: '#D97757',
     logo: ClaudeLogo,
   },
@@ -111,6 +104,7 @@ export const MODELS: readonly ModelInfo[] = [
     vendor: 'X',
     descriptionKey: 'chat.models.grok',
     minPlan: 'business',
+    available: true,
     brandColor: '#323E53',
     logo: GrokLogo,
   },
@@ -124,5 +118,5 @@ export function findModel(id: ModelId): ModelInfo {
 }
 
 export function isModelAllowed(model: ModelInfo, plan: Plan): boolean {
-  return planIncludes(plan, model.minPlan);
+  return model.available && planIncludes(plan, model.minPlan);
 }

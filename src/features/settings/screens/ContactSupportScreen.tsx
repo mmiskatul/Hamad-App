@@ -4,6 +4,8 @@ import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Attachment01Icon, Cancel01Icon, SentIcon } from '@hugeicons/core-free-icons';
 
+import { submitSupportTicket } from '../api/settingsApi';
+
 import { useTheme } from '@/shared/theme';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
@@ -14,23 +16,6 @@ import IconPillButton from '@/shared/ui/IconPillButton';
 import TextField from '@/shared/ui/TextField';
 import ScreenHeader from '@/shared/ui/ScreenHeader';
 
-/*
- * Contact Support (Figma 140:2044): a Subject line, a message box that fills the
- * remaining height, a row of removable attachment chips, and an attach + Send
- * pair pinned to the bottom.
- *
- * The message box takes the leftover space rather than a fixed height (Figma
- * gives it flex:1 inside a 714pt column) — on a short device it shrinks instead
- * of pushing Send off screen, and the keyboard-avoiding view handles the rest.
- *
- * Send is disabled until there is both a subject and a message: a support
- * ticket with an empty body is a round trip for the user and a dead ticket for
- * whoever answers it.
- *
- * TODO(backend): attachments need expo-document-picker and an upload endpoint,
- * and submitting needs the support module. The chips render from local state so
- * the layout and the remove interaction are final; only the source changes.
- */
 const CONTENT_WIDTH = 370;
 
 export default function ContactSupportScreen(): React.JSX.Element {
@@ -42,6 +27,8 @@ export default function ContactSupportScreen(): React.JSX.Element {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [attachments, setAttachments] = useState<readonly string[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const canSend = subject.trim().length > 0 && message.trim().length > 0;
 
@@ -49,15 +36,28 @@ export default function ContactSupportScreen(): React.JSX.Element {
     setAttachments((current) => current.filter((item) => item !== name));
   }, []);
 
-  const onSend = useCallback(() => {
-    // TODO(backend): POST the ticket, then surface success/failure. Clearing and
-    // leaving optimistically would lose the message if the request failed.
-    if (router.canGoBack()) {
-      router.back();
-      return;
+  const onSend = useCallback(async () => {
+    if (!canSend || submitting) return;
+
+    setSubmitting(true);
+    setErrorMessage(null);
+    try {
+      await submitSupportTicket(subject, message);
+      if (router.canGoBack()) {
+        router.back();
+        return;
+      }
+      router.replace('/about');
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error && error.message
+          ? error.message
+          : 'Could not send your message. Please try again.',
+      );
+    } finally {
+      setSubmitting(false);
     }
-    router.replace('/about');
-  }, [router]);
+  }, [canSend, message, router, subject, submitting]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>
@@ -84,11 +84,22 @@ export default function ContactSupportScreen(): React.JSX.Element {
               <TextField
                 placeholder={t('settings.support.message')}
                 value={message}
-                onChangeText={setMessage}
+                onChangeText={(next) => {
+                  setMessage(next);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 multiline
                 fill
                 testID="support-message"
               />
+              {errorMessage ? (
+                <AppText
+                  style={{ ...theme.type.caption, color: theme.color.danger }}
+                  testID="support-error"
+                >
+                  {errorMessage}
+                </AppText>
+              ) : null}
             </View>
 
             <View style={{ paddingTop: 20, gap: 10 }}>
@@ -113,15 +124,17 @@ export default function ContactSupportScreen(): React.JSX.Element {
                   accessibilityLabel={t('settings.support.attach')}
                   testID="support-attach"
                   onPress={() => {
-                    // TODO(backend): expo-document-picker + upload endpoint.
+                    // Attachments still need a picker + upload endpoint.
                   }}
                 />
                 <AppButton
                   label={t('settings.support.send')}
                   icon={SentIcon}
                   fill
-                  disabled={!canSend}
-                  onPress={onSend}
+                  disabled={!canSend || submitting}
+                  onPress={() => {
+                    void onSend();
+                  }}
                   testID="support-send"
                 />
               </View>
@@ -133,7 +146,6 @@ export default function ContactSupportScreen(): React.JSX.Element {
   );
 }
 
-/* Removable attachment chip (Figma 295:1276): bg/surface, 4pt radius, 8/2 padding. */
 function AttachmentChip({
   name,
   onRemove,

@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
-import { I18nManager, Pressable, ScrollView, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { I18nManager, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   cancelAnimation,
@@ -21,6 +21,7 @@ import {
 import { useShallow } from 'zustand/react/shallow';
 
 import { orderedConversations, useChatStore, type Conversation } from '../store/chatStore';
+import { refreshConversations } from '../api/conversationApi';
 
 import { usePlan } from '@/shared/plan';
 import { useProfileStore } from '@/shared/profile';
@@ -139,11 +140,21 @@ function DrawerPanel({
 
   const conversations = useChatStore(useShallow(state => state.conversations));
   const activeId = useChatStore(state => state.activeId);
+  const [refreshing, setRefreshing] = useState(false);
   const plan = usePlan();
   // The redesigned footer shows an AVATAR, not the name — so the drawer needs
   // only the initial. Still account data from the store, never an i18n string.
   const accountName = useProfileStore(state => state.name);
   const accountInitial = accountName.trim().charAt(0).toUpperCase() || '?';
+  const refreshRecents = useCallback(async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await refreshConversations();
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refreshing]);
 
   // Pinned chats first, then most recent — derived, never a stored order.
   const ordered = useMemo(() => orderedConversations(conversations), [conversations]);
@@ -314,24 +325,40 @@ function DrawerPanel({
               </Pressable>
             </View>
 
-            {conversations.length === 0 ? (
-              <AppText
-                style={{
-                  ...theme.type.caption,
-                  color: theme.color.textSecondary,
-                  paddingTop: theme.space.md,
-                }}
-                testID="drawer-recents-empty"
-              >
-                {t('chat.drawer.noRecents')}
-              </AppText>
-            ) : (
-              <ScrollView
-                style={{ flex: 1, paddingTop: theme.space.sm }}
-                contentContainerStyle={{ paddingBottom: theme.space.lg }}
-                showsVerticalScrollIndicator={true}
-                nestedScrollEnabled
-              >
+            <ScrollView
+              style={{ flex: 1, paddingTop: theme.space.sm }}
+              contentContainerStyle={{
+                flexGrow: 1,
+                paddingBottom: theme.space.lg,
+              }}
+              showsVerticalScrollIndicator
+              nestedScrollEnabled
+              alwaysBounceVertical
+              refreshControl={
+                <RefreshControl
+                  refreshing={refreshing}
+                  onRefresh={refreshRecents}
+                  colors={[theme.color.accent]}
+                  progressBackgroundColor={theme.color.surface}
+                  tintColor={theme.color.accent}
+                  testID="drawer-recents-refresh"
+                />
+              }
+              testID="drawer-recents-list"
+            >
+              {conversations.length === 0 ? (
+                <AppText
+                  style={{
+                    ...theme.type.caption,
+                    color: theme.color.textSecondary,
+                    paddingTop: theme.space.md,
+                  }}
+                  testID="drawer-recents-empty"
+                >
+                  {t('chat.drawer.noRecents')}
+                </AppText>
+              ) : (
+                <>
                 {ordered.map((conversation, index) => {
                   const active = conversation.id === activeId;
                   return (
@@ -374,8 +401,9 @@ function DrawerPanel({
                     </Pressable>
                   );
                 })}
-              </ScrollView>
-            )}
+                </>
+              )}
+            </ScrollView>
           </View>
         </View>
 

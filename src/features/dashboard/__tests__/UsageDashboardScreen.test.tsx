@@ -8,7 +8,7 @@ import UsageDashboardScreen from '../screens/UsageDashboardScreen';
 import { initI18n } from '@/shared/i18n';
 import { usePlanStore } from '@/shared/plan';
 import { THEMES, ThemeProvider, type ThemeMode } from '@/shared/theme';
-import { useUsageStore } from '@/shared/usage';
+import { PLAN_LIMITS, useUsageStore } from '@/shared/usage';
 
 /*
  * Usage dashboard (Figma 142:496).
@@ -21,6 +21,10 @@ import { useUsageStore } from '@/shared/usage';
 const mockPush = jest.fn();
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: mockPush, back: jest.fn(), replace: jest.fn(), canGoBack: () => true }),
+}));
+
+jest.mock('@/shared/usage/usageApi', () => ({
+  getUsage: jest.fn(() => new Promise(() => undefined)),
 }));
 
 const metrics = {
@@ -52,10 +56,14 @@ beforeEach(() => {
   usePlanStore.setState({ plan: 'free', hasHydrated: true });
   useUsageStore.setState({
     periodStart: Date.UTC(2026, 4, 1),
+    plan: 'free',
+    limits: PLAN_LIMITS.free,
     requests: 25,
     tokens: 500,
     byModel: { gpt: { requests: 20, tokens: 400 }, claude: { requests: 5, tokens: 100 } },
     hasHydrated: true,
+    isRefreshing: false,
+    error: null,
   });
 });
 
@@ -69,7 +77,7 @@ describe('UsageDashboardScreen', () => {
   });
 
   it('re-reads the meters when the plan changes', () => {
-    usePlanStore.setState({ plan: 'pro' });
+    useUsageStore.setState({ plan: 'pro', limits: PLAN_LIMITS.pro });
     renderScreen();
 
     // Pro = 500 requests ⇒ the same 25 requests are now 5%.
@@ -77,8 +85,7 @@ describe('UsageDashboardScreen', () => {
   });
 
   it('never fills the request meter for the unlimited tier', () => {
-    usePlanStore.setState({ plan: 'business' });
-    useUsageStore.setState({ requests: 100000 });
+    useUsageStore.setState({ plan: 'business', limits: PLAN_LIMITS.business, requests: 100000 });
     renderScreen();
 
     expect(textOf('usage-gauge-requests-value')).toBe('0%');
@@ -93,7 +100,7 @@ describe('UsageDashboardScreen', () => {
   });
 
   it('omits the upgrade CTA entirely for a paying user', () => {
-    usePlanStore.setState({ plan: 'pro' });
+    useUsageStore.setState({ plan: 'pro', limits: PLAN_LIMITS.pro });
     renderScreen();
 
     expect(screen.queryByTestId('usage-upgrade')).toBeNull();

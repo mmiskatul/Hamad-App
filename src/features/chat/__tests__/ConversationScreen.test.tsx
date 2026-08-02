@@ -1,9 +1,10 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ConversationScreen from '../screens/ConversationScreen';
+import { deleteConversation as deleteConversationRemote } from '../api/conversationApi';
 import { migrateChatState, useChatStore, type Conversation } from '../store/chatStore';
 
 import { useProjectStore, type Project } from '@/features/projects';
@@ -24,6 +25,10 @@ const mockPush = jest.fn();
 const mockBack = jest.fn();
 const mockReplace = jest.fn();
 const mockRedirect = jest.fn();
+jest.mock('../api/conversationApi', () => ({
+  deleteConversation: jest.fn(),
+  updateConversation: jest.fn(() => Promise.resolve()),
+}));
 jest.mock('expo-router', () => ({
   useRouter: () => ({
     push: mockPush,
@@ -36,6 +41,8 @@ jest.mock('expo-router', () => ({
     return null;
   },
 }));
+
+const mockDeleteConversationRemote = jest.mocked(deleteConversationRemote);
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve()) }));
 
@@ -78,6 +85,8 @@ beforeEach(() => {
   mockBack.mockClear();
   mockReplace.mockClear();
   mockRedirect.mockClear();
+  mockDeleteConversationRemote.mockReset();
+  mockDeleteConversationRemote.mockResolvedValue();
   usePlanStore.setState({ plan: 'free', hasHydrated: true });
   useUsageStore.setState({ requests: 0, tokens: 0, byModel: {}, hasHydrated: true });
   useProjectStore.setState({
@@ -200,6 +209,9 @@ describe('ConversationScreen', () => {
     });
     renderScreen();
 
+    // Rendering settled history must not clear the arriving message's reveal.
+    expect(useChatStore.getState().streamingId).toBe('m3');
+
     // The settled reply is fully on screen from the first frame...
     expect(screen.getByTestId('message-m2-text')).toBeTruthy();
     expect(String(screen.getByTestId('message-m2-text').props.accessibilityLabel)).toBe(
@@ -221,14 +233,19 @@ describe('ConversationScreen', () => {
     expect(screen.getByTestId('model-row-gpt')).toBeTruthy();
   });
 
-  it('deleting from the row menu leaves for home rather than a dead screen', () => {
+  it('confirms backend deletion before leaving for home', async () => {
     renderScreen();
 
     fireEvent.press(screen.getByTestId('conversation-menu'));
     fireEvent.press(screen.getByTestId('chat-menu-delete'));
+
+    expect(screen.getByTestId('delete-chat-dialog')).toBeTruthy();
+    expect(useChatStore.getState().conversations).toHaveLength(1);
+
     fireEvent.press(screen.getByTestId('delete-chat-confirm'));
 
-    expect(useChatStore.getState().conversations).toHaveLength(0);
+    await waitFor(() => expect(mockDeleteConversationRemote).toHaveBeenCalledWith('c1'));
+    await waitFor(() => expect(useChatStore.getState().conversations).toHaveLength(0));
     expect(mockReplace).toHaveBeenCalledWith('/home');
   });
 

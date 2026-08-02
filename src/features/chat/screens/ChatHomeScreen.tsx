@@ -1,64 +1,60 @@
 import React, { useCallback, useState } from 'react';
-import { View, ScrollView } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
 
+import {
+  deleteConversation as deleteConversationRemote,
+  refreshConversations,
+  updateConversation as updateConversationRemote,
+} from '../api/conversationApi';
 import AttachmentMenu from '../components/AttachmentMenu';
 import ChatComposer from '../components/ChatComposer';
 import ChatDrawer from '../components/ChatDrawer';
 import ChatMenu, { type ChatMenuAction } from '../components/ChatMenu';
 import ChatTopBar from '../components/ChatTopBar';
+import DeleteChatDialog from '../components/DeleteChatDialog';
 import ModelMenu from '../components/ModelMenu';
 import RenameChatDialog from '../components/RenameChatDialog';
 import UpsellDialog from '../components/UpsellDialog';
 import WelcomeHero from '../components/WelcomeHero';
 import { findModel } from '../constants';
+import { useSendPrompt } from '../hooks/useSendPrompt';
 import { shouldShowUpsell, useChatStore } from '../store/chatStore';
 
 import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
 import useKeyboardOpen from '@/shared/ui/useKeyboardOpen';
+import { ApiError } from '@/shared/api/client';
+import { useTranslation } from '@/shared/i18n/useTranslation';
 import { useCanUpgrade } from '@/shared/plan';
 import { useTheme } from '@/shared/theme';
 
-/*
- * Chat home (Figma 404:1772 empty state, 404:804 with the drawer open).
- *
- * This screen owns the four dismissible surfaces, because they are all opened
- * from its chrome and must be mutually exclusive — two overlays on screen at
- * once is a stack of scrims and a trapped user. `surface` is therefore ONE piece
- * of state, not four booleans that can disagree:
- *   drawer     ← hamburger
- *   models     ← the model pill's chevron
- *   attach     ← the composer's +
- *   upsell     ← automatically, after the session's 2nd prompt
- *
- * ADAPTIVE: all colour comes from useTheme() (node 404:1772 is the light
- * variant; the user's reference render is dark).
- *
- * TODO(backend): sending currently records the prompt locally so Recents and the
- * upsell counter behave; the actual completion goes through
- * backend/src/ai/routing.service.ts once the chat module exists, and the
- * conversation view replaces this welcome hero as soon as a chat has messages.
- */
 const SCREEN_PADDING = 16;
-const TOP_BAR_TOP = 22; // Figma top 74 − the 52pt status bar band
+const TOP_BAR_TOP = 22;
 const COMPOSER_BOTTOM_GAP = 8;
 
-type Surface = 'none' | 'drawer' | 'models' | 'attach' | 'upsell' | 'chatMenu' | 'rename';
+type Surface =
+  | 'none'
+  | 'drawer'
+  | 'models'
+  | 'attach'
+  | 'upsell'
+  | 'chatMenu'
+  | 'rename'
+  | 'delete';
 
-/* Recents row height + gap, used to hang the long-press menu near its row. */
 const DRAWER_ROW_PITCH = 52;
 const DRAWER_RECENTS_TOP = 300;
 
 export default function ChatHomeScreen(): React.JSX.Element {
   const theme = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const router = useRouter();
 
   const model = useChatStore((state) => state.model);
   const setModel = useChatStore((state) => state.setModel);
-  const sendPrompt = useChatStore((state) => state.sendPrompt);
   const startNewChat = useChatStore((state) => state.startNewChat);
   const markUpsellSeen = useChatStore((state) => state.markUpsellSeen);
   const conversations = useChatStore(useShallow((state) => state.conversations));
@@ -71,21 +67,17 @@ export default function ChatHomeScreen(): React.JSX.Element {
 
   const [draft, setDraft] = useState('');
   const [surface, setSurface] = useState<Surface>('none');
-
-  /*
-   * Hero collapses to the logomark only while the keyboard is open. The
-   * composer is the only thing that opens the IME on this screen, so the
-   * single signal "keyboard up ⇔ user is interacting with the composer"
-   * covers both focus-only and typing without checking focus separately. The
-   * draft text alone is NOT a trigger — pasting then dismissing the keyboard
-   * (or state restoration from /conversation) leaves the title/subtitle/
-   * Upgrade chip visible.
-   */
   const keyboardOpen = useKeyboardOpen();
   const heroHidden = keyboardOpen;
-  /* The conversation a row menu / rename dialog is acting on. */
   const [targetId, setTargetId] = useState<string | null>(null);
   const [menuTop, setMenuTop] = useState(0);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // The first message must use the same backend orchestration as follow-up
+  // messages. Calling the store directly creates the local user turn and sets
+  // `thinkingFor`, but never sends anything to Fastify, leaving the UI spinning.
+  const sendReply = useSendPrompt(null);
 
   const closeSurface = useCallback(() => setSurface('none'), []);
 
@@ -93,12 +85,10 @@ export default function ChatHomeScreen(): React.JSX.Element {
   const onOpenModelPicker = useCallback(() => setSurface('models'), []);
   const onAttach = useCallback(() => setSurface('attach'), []);
   const onVoice = useCallback(() => {
-    // TODO(backend): voice input is a Pro/Business feature (plan matrix)
-    // and needs the speech module.
+    // TODO(backend): voice input is a Pro/Business feature and still needs the speech module.
   }, []);
   const onPickAttachment = useCallback(() => {
-    // TODO(backend): file upload is a Pro/Business feature and needs
-    // expo-image-picker / expo-document-picker plus the upload endpoint.
+    // TODO(backend): file upload still needs a picker + upload endpoint.
   }, []);
   const onSeeAll = useCallback(() => {
     closeSurface();
@@ -110,10 +100,12 @@ export default function ChatHomeScreen(): React.JSX.Element {
   }, [closeSurface, router]);
   const onOpenConversation = useCallback(
     (id: string) => {
+      const conversation = useChatStore.getState().conversations.find((item) => item.id === id);
       openConversation(id);
+      if (conversation) setModel(conversation.model);
       router.push('/conversation');
     },
-    [openConversation, router],
+    [openConversation, router, setModel],
   );
   const onRenameDismiss = useCallback(() => {
     closeSurface();
@@ -121,47 +113,38 @@ export default function ChatHomeScreen(): React.JSX.Element {
   }, [closeSurface]);
   const onRenameSubmit = useCallback(
     (title: string) => {
-      if (targetId) renameConversation(targetId, title);
+      if (!targetId) return;
+      renameConversation(targetId, title);
+      setTargetId(null);
+      setSurface('none');
+      void updateConversationRemote(targetId, { title }).catch(() => {
+        void refreshConversations();
+      });
     },
-    [targetId, renameConversation],
+    [renameConversation, targetId],
   );
 
   const target = conversations.find((conversation) => conversation.id === targetId) ?? null;
 
   const onSend = useCallback(
     (message: string) => {
-      sendPrompt(message);
+      sendReply(message);
       setDraft('');
 
-      // Read the state AFTER the write so the count includes this prompt. The
-      // nudge is only for the Free tier — selling Pro to a Pro subscriber is
-      // worse than saying nothing.
       if (canUpgrade && shouldShowUpsell(useChatStore.getState())) {
         setSurface('upsell');
       }
 
-      /*
-       * Hand off to the transcript. sendPrompt() has just created the
-       * conversation and pointed activeId at it, so /conversation resolves
-       * immediately; the reply is requested there, which is also what makes the
-       * thinking indicator appear in the right place.
-       *
-       * PUSH, not replace: back from a conversation should land on the welcome
-       * screen, which is where the user started.
-       */
       router.push('/conversation');
     },
-    [sendPrompt, canUpgrade, router],
+    [canUpgrade, router, sendReply],
   );
 
   const onNewChat = useCallback(() => {
-    // The open conversation is already in Recents (sendPrompt put it there the
-    // moment it got its first prompt), so this only clears the pointer — a new
-    // chat can never discard the previous one.
     startNewChat();
     setDraft('');
     closeSurface();
-  }, [startNewChat, closeSurface]);
+  }, [closeSurface, startNewChat]);
 
   const openUpgrade = useCallback(() => {
     closeSurface();
@@ -173,7 +156,6 @@ export default function ChatHomeScreen(): React.JSX.Element {
     (id: string, index: number) => {
       setTargetId(id);
       setMenuTop(insets.top + DRAWER_RECENTS_TOP + index * DRAWER_ROW_PITCH);
-      // Replaces the drawer rather than stacking on it — one overlay at a time.
       setSurface('chatMenu');
     },
     [insets.top],
@@ -189,38 +171,71 @@ export default function ChatHomeScreen(): React.JSX.Element {
           break;
         case 'rename':
           setSurface('rename');
-          return; // the dialog still needs targetId
-        case 'pin':
+          return;
+        case 'pin': {
+          const nextPinned = !(target?.pinned ?? false);
           togglePinned(targetId);
+          void updateConversationRemote(targetId, { pinned: nextPinned }).catch(() => {
+            void refreshConversations();
+          });
           break;
+        }
         case 'files':
           openConversation(targetId);
           router.push('/chat-files');
           break;
         case 'share':
-          // TODO(backend): needs a server-issued share id.
           break;
         case 'delete':
-          deleteConversation(targetId);
-          break;
+          setDeleteError(null);
+          setSurface('delete');
+          return;
       }
       setTargetId(null);
     },
-    [targetId, onNewChat, togglePinned, openConversation, deleteConversation, router],
+    [onNewChat, openConversation, router, target?.pinned, targetId, togglePinned],
   );
 
+  const onDeleteDismiss = useCallback(() => {
+    if (isDeleting) return;
+    setSurface('none');
+    setTargetId(null);
+    setDeleteError(null);
+  }, [isDeleting]);
+
+  const onDeleteConfirm = useCallback(async () => {
+    if (!targetId || isDeleting) return;
+    setIsDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteConversationRemote(targetId);
+      deleteConversation(targetId);
+      setSurface('none');
+      setTargetId(null);
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 404) {
+        deleteConversation(targetId);
+        setSurface('none');
+        setTargetId(null);
+        return;
+      }
+      setDeleteError(
+        error instanceof Error ? error.message : t('chat.deleteDialog.error'),
+      );
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [deleteConversation, isDeleting, t, targetId]);
+
   const openAccount = useCallback(() => {
-    // Close first: the drawer must not still be open underneath when the user
-    // comes back from settings.
     closeSurface();
     router.push('/profile');
   }, [closeSurface, router]);
 
   const dismissUpsell = useCallback(() => {
-    // Seen counts as dismissed: it must not reappear on the next prompt.
     markUpsellSeen();
     closeSurface();
-  }, [markUpsellSeen, closeSurface]);
+  }, [closeSurface, markUpsellSeen]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.color.canvas }}>
@@ -269,11 +284,7 @@ export default function ChatHomeScreen(): React.JSX.Element {
         </View>
       </KeyboardAvoider>
 
-      <AttachmentMenu
-        visible={surface === 'attach'}
-        onDismiss={closeSurface}
-        onPick={onPickAttachment}
-      />
+      <AttachmentMenu visible={surface === 'attach'} onDismiss={closeSurface} onPick={onPickAttachment} />
 
       <ChatDrawer
         visible={surface === 'drawer'}
@@ -302,6 +313,14 @@ export default function ChatHomeScreen(): React.JSX.Element {
         onSubmit={onRenameSubmit}
       />
 
+      <DeleteChatDialog
+        visible={surface === 'delete'}
+        loading={isDeleting}
+        error={deleteError}
+        onDismiss={onDeleteDismiss}
+        onConfirm={onDeleteConfirm}
+      />
+
       <ModelMenu
         visible={surface === 'models'}
         onDismiss={closeSurface}
@@ -310,11 +329,7 @@ export default function ChatHomeScreen(): React.JSX.Element {
         onUpgrade={openUpgrade}
       />
 
-      <UpsellDialog
-        visible={surface === 'upsell'}
-        onDismiss={dismissUpsell}
-        onUpgrade={openUpgrade}
-      />
+      <UpsellDialog visible={surface === 'upsell'} onDismiss={dismissUpsell} onUpgrade={openUpgrade} />
     </View>
   );
 }

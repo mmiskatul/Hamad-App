@@ -130,7 +130,12 @@ async function refreshAuthSession(session: AuthSession): Promise<AuthSession> {
       await saveAuthSession(refreshed);
       return refreshed;
     } catch (error) {
-      await clearAuthSession();
+      // A temporary network outage or 5xx must not turn into a logout. Only an
+      // explicit refresh rejection proves that the persisted session is no
+      // longer valid.
+      if (error instanceof ApiError && error.status === 401) {
+        await clearAuthSession();
+      }
       throw error;
     } finally {
       refreshPromise = null;

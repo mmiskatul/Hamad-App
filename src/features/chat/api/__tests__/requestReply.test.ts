@@ -1,7 +1,10 @@
-import { apiRequest } from '@/shared/api/client';
+import { ApiError, apiRequest } from '@/shared/api/client';
 import { requestReply } from '../requestReply';
 
-jest.mock('@/shared/api/client', () => ({ apiRequest: jest.fn() }));
+jest.mock('@/shared/api/client', () => ({
+  ...jest.requireActual('@/shared/api/client'),
+  apiRequest: jest.fn(),
+}));
 
 const apiRequestMock = apiRequest as jest.MockedFunction<typeof apiRequest>;
 
@@ -53,5 +56,29 @@ describe('requestReply', () => {
       modelId: 'gpt',
       signal: controller.signal,
     })).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('retries one transient provider failure with the same idempotency key', async () => {
+    apiRequestMock
+      .mockRejectedValueOnce(new ApiError(502, 'PROVIDER_REQUEST_FAILED', 'Temporary failure'))
+      .mockResolvedValueOnce({
+        assistantMessage: {
+          id: 'reply-2',
+          content: 'Recovered reply',
+          modelId: 'gpt',
+          provider: 'OpenAI',
+          language: 'en',
+          createdAt: '2026-08-02T00:00:00.000Z',
+        },
+      });
+
+    await expect(requestReply('hello', {
+      conversationId: 'conversation-1',
+      clientMessageId: 'message-1',
+      modelId: 'gpt',
+    })).resolves.toBe('Recovered reply');
+
+    expect(apiRequestMock).toHaveBeenCalledTimes(2);
+    expect(apiRequestMock.mock.calls[0]).toEqual(apiRequestMock.mock.calls[1]);
   });
 });
