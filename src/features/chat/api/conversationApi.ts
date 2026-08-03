@@ -34,6 +34,7 @@ type MessageResponse = {
   content: string;
   clientMessageId?: string;
   createdAt: string;
+  generatedImages?: AttachmentResponse[];
 };
 
 type ConversationsResponse = { conversations: ConversationResponse[] };
@@ -50,12 +51,15 @@ type UpdateConversationInput = Partial<{
   pinned: boolean;
 }>;
 
-function toMessage(message: MessageResponse): ChatMessage {
+function toMessage(conversationId: string, message: MessageResponse): ChatMessage {
   return {
     id: message.clientMessageId ?? message.id,
     role: message.role,
     text: message.content,
     at: Date.parse(message.createdAt),
+    ...(message.generatedImages?.length
+      ? { generatedImages: message.generatedImages.map((image) => toAttachment(conversationId, image)) }
+      : {}),
   };
 }
 
@@ -137,7 +141,11 @@ export async function refreshConversation(conversationId: string): Promise<Conve
     (conversation) => conversation.id === conversationId,
   );
   return replaceConversationInStore(
-    toConversation(response.conversation, existing, response.messages.map(toMessage)),
+    toConversation(
+      response.conversation,
+      existing,
+      response.messages.map((message) => toMessage(conversationId, message)),
+    ),
   );
 }
 

@@ -133,7 +133,7 @@ describe('UpgradePlanScreen', () => {
   it('asks for confirmation before changing to Pro', async () => {
     mockUpdateAccountPlan.mockResolvedValue({
       plan: 'pro',
-      limits: { requests: 500, tokens: 4000 },
+      limits: { requests: 500, tokens: 500_000 },
     });
     renderScreen();
 
@@ -155,7 +155,7 @@ describe('UpgradePlanScreen', () => {
   it('supports confirming the Business plan', async () => {
     mockUpdateAccountPlan.mockResolvedValue({
       plan: 'business',
-      limits: { requests: 5000, tokens: 8000 },
+      limits: { requests: 2_000, tokens: 1_500_000 },
     });
     renderScreen();
 

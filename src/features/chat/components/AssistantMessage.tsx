@@ -9,6 +9,8 @@ import { AppText } from '@/shared/ui/AppText';
 import HexLogo from '@/shared/ui/HexLogo';
 import { Icon, type IconProps } from '@/shared/ui/Icon';
 import TypewriterText from '@/shared/ui/TypewriterText';
+import ConversationAttachments from './ConversationAttachments';
+import type { ChatAttachment } from '../store/chatStore';
 
 /*
  * The assistant's reply (Figma 146:1679 + 182:678): the 16pt brand mark on the
@@ -33,6 +35,7 @@ const ACTION_GAP = 24;
 
 export type AssistantMessageProps = {
   text: string;
+  generatedImages?: readonly ChatAttachment[];
   /** Pre-formatted time ("9:48 PM"). */
   time: string;
   /** Reveal word by word — true only for the reply that just arrived. */
@@ -47,6 +50,7 @@ type Feedback = 'none' | 'up' | 'down';
 
 function AssistantMessage({
   text,
+  generatedImages = [],
   time,
   animate = false,
   onRevealed,
@@ -89,6 +93,7 @@ function AssistantMessage({
             style={{ ...theme.type.body, color: theme.color.textPrimary }}
             testID={testID ? `${testID}-text` : undefined}
           />
+          <ConversationAttachments attachments={generatedImages} />
           <AppText
             style={{
               ...theme.type.tag,

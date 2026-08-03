@@ -6,6 +6,7 @@ import { useChatStore } from '../../store/chatStore';
 import { useSendPrompt } from '../useSendPrompt';
 
 import { initI18n } from '@/shared/i18n';
+import { ApiError } from '@/shared/api/client';
 import { refreshUsageSnapshot } from '@/shared/usage';
 
 jest.mock('../../api/conversationApi', () => ({ refreshConversation: jest.fn() }));
@@ -113,4 +114,22 @@ it('shows the backend error and clears thinking when generation fails', async ()
     text: 'OpenAI is temporarily unavailable.',
   });
   expect(useChatStore.getState().thinkingFor).toBeNull();
+});
+
+it('refreshes authoritative usage when the backend rejects an over-quota message', async () => {
+  requestReplyMock.mockRejectedValue(
+    new ApiError(429, 'TOKEN_LIMIT_REACHED', 'You have used all tokens in your free plan.'),
+  );
+  const { result } = renderHook(() => useSendPrompt(null));
+
+  await act(async () => {
+    result.current('Hello');
+    await Promise.resolve();
+  });
+
+  expect(refreshUsageMock).toHaveBeenCalledTimes(1);
+  expect(useChatStore.getState().conversations[0]?.messages.at(-1)).toMatchObject({
+    role: 'assistant',
+    text: 'You have used all tokens in your free plan.',
+  });
 });

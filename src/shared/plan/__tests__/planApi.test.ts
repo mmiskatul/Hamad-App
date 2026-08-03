@@ -14,15 +14,15 @@ beforeEach(() => {
   usePlanStore.setState({ plan: 'free', hasHydrated: true });
   useUsageStore.setState({
     plan: 'free',
-    limits: { requests: 50, tokens: 1000 },
+    limits: { requests: 50, tokens: 50_000 },
   });
 });
 
 describe('updateAccountPlan', () => {
   it.each([
-    ['free', 50, 1000],
-    ['pro', 500, 4000],
-    ['business', 5000, 8000],
+    ['free', 50, 50_000],
+    ['pro', 500, 500_000],
+    ['business', 2_000, 1_500_000],
   ] as const)('updates the backend and local stores for %s', async (plan, requests, tokens) => {
     mockApiRequest.mockResolvedValue({
       plan,

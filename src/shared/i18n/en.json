@@ -354,25 +354,25 @@
       "free": {
         "pitch": "Essential tools to get started with AI.",
         "requests": "50 requests/mo",
-        "tokens": "1000 tokens/mo",
+        "tokens": "50,000 tokens/mo",
         "models": "Access to 2 basic models",
         "support": "Standard support",
         "cta": "Choose Free"
       },
       "pro": {
         "pitch": "For power users requiring premium models.",
-        "requests": "500 Pro requests/mo",
-        "tokens": "4000 tokens/mo",
+        "requests": "500 requests/mo",
+        "tokens": "500,000 tokens/mo",
         "upload": "File upload & Voice input",
         "models": "Access to 4 premium models",
-        "modelsNote": "(GPT-4, Gemini Pro, Claude 3, Grok)",
+        "modelsNote": "(ChatGPT, DeepSeek, Gemini, Perplexity)",
         "support": "Priority support",
         "cta": "Upgrade to Pro"
       },
       "business": {
         "pitch": "Advanced features for collaborative teams.",
-        "requests": "2000 Pro requests/mo",
-        "tokens": "8000 tokens/mo",
+        "requests": "2,000 requests/mo",
+        "tokens": "1,500,000 tokens/mo",
         "upload": "File upload & voice input",
         "models": "Access to all 6 models",
         "support": "Priority support",

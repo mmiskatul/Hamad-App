@@ -235,6 +235,31 @@ describe('ConversationScreen', () => {
     expect(screen.getByTestId('message-m3-text')).toBeTruthy();
   });
 
+  it('shows generated images in the assistant message and opens the preview', async () => {
+    useChatStore.setState({
+      conversations: [
+        conversation({
+          messages: [{
+            id: 'image-message', role: 'assistant', text: 'Here is your generated image.', at: 1001,
+            generatedImages: [{
+              id: 'generated-1', name: 'generated.png', mimeType: 'image/png', size: 5,
+              at: 1001, uri: 'http://localhost/generated.png',
+            }],
+          }],
+        }),
+      ],
+    });
+    renderScreen();
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    fireEvent.press(screen.getByLabelText('Open generated.png'));
+
+    expect(screen.getByLabelText('Close image preview')).toBeTruthy();
+  });
+
   it('opens the model sheet from the header pill', () => {
     renderScreen();
 

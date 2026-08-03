@@ -4,6 +4,7 @@ import { refreshConversation } from '../api/conversationApi';
 import { requestReply } from '../api/requestReply';
 import { useChatStore } from '../store/chatStore';
 
+import { ApiError } from '@/shared/api/client';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import { refreshUsageSnapshot } from '@/shared/usage';
 
@@ -73,6 +74,9 @@ export function useSendPrompt(targetId: string | null) {
             error instanceof Error &&
             error.name !== 'AbortError'
           ) {
+            if (error instanceof ApiError && error.status === 429) {
+              refreshUsageSnapshot().catch(() => undefined);
+            }
             useChatStore
               .getState()
               .receiveReply(newActiveId, error.message || t('chat.conversation.error'));

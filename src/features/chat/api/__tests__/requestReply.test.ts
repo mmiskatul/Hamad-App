@@ -34,7 +34,7 @@ describe('requestReply', () => {
       method: 'POST',
       authenticated: true,
       signal: undefined,
-      timeoutMs: 75_000,
+      timeoutMs: 195_000,
       body: JSON.stringify({
         clientMessageId: 'message-1',
         content: 'hello',

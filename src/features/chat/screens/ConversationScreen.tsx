@@ -668,6 +668,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
       ) : (
         <AssistantMessage
           text={item.text}
+          generatedImages={item.generatedImages}
           time={formatRowTime(item.at, i18n.language)}
           animate={item.id === streamingId}
           onRevealed={finishStreaming}

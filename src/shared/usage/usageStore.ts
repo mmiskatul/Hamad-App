@@ -11,9 +11,9 @@ export const USAGE_STORAGE_KEY = 'oneai.usage';
 export type UsageLimits = { requests: number; tokens: number };
 
 export const PLAN_LIMITS: Record<Plan, UsageLimits> = {
-  free: { requests: 50, tokens: 1000 },
-  pro: { requests: 500, tokens: 4000 },
-  business: { requests: Number.POSITIVE_INFINITY, tokens: 8000 },
+  free: { requests: 50, tokens: 50_000 },
+  pro: { requests: 500, tokens: 500_000 },
+  business: { requests: 2_000, tokens: 1_500_000 },
 };
 
 export type ModelUsage = { requests: number; tokens: number };
@@ -99,7 +99,13 @@ export const useUsageStore = create<UsageState>()(
         if (error && __DEV__) {
           console.warn('[usageStore] rehydrate failed:', error);
         }
-        useUsageStore.setState({ hasHydrated: true });
+        // Limits are product configuration, not user data. Replace any older
+        // persisted allowance immediately; the authenticated /usage refresh
+        // will then confirm the same server-authoritative values.
+        useUsageStore.setState({
+          limits: PLAN_LIMITS[state?.plan ?? DEFAULT_PLAN],
+          hasHydrated: true,
+        });
       },
     },
   ),

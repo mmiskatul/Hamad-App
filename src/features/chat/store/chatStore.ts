@@ -33,6 +33,7 @@ export type ChatMessage = {
   role: 'user' | 'assistant';
   text: string;
   at: number;
+  generatedImages?: ChatAttachment[];
 };
 
 /*

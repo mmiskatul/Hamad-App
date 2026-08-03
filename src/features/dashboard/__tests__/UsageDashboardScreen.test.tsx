@@ -59,8 +59,8 @@ beforeEach(() => {
     plan: 'free',
     limits: PLAN_LIMITS.free,
     requests: 25,
-    tokens: 500,
-    byModel: { gpt: { requests: 20, tokens: 400 }, claude: { requests: 5, tokens: 100 } },
+    tokens: 25_000,
+    byModel: { gpt: { requests: 20, tokens: 20_000 }, claude: { requests: 5, tokens: 5_000 } },
     hasHydrated: true,
     isRefreshing: false,
     error: null,
@@ -71,7 +71,7 @@ describe('UsageDashboardScreen', () => {
   it('reads the meters against the current plan allowance', () => {
     renderScreen();
 
-    // Free = 50 requests, 1000 tokens ⇒ both at 50%.
+    // Free = 50 requests, 50,000 tokens ⇒ both at 50%.
     expect(textOf('usage-gauge-requests-value')).toBe('50%');
     expect(textOf('usage-gauge-tokens-value')).toBe('50%');
   });
@@ -84,11 +84,11 @@ describe('UsageDashboardScreen', () => {
     expect(textOf('usage-gauge-requests-value')).toBe('5%');
   });
 
-  it('never fills the request meter for the unlimited tier', () => {
-    useUsageStore.setState({ plan: 'business', limits: PLAN_LIMITS.business, requests: 100000 });
+  it('measures Business requests against its finite allowance', () => {
+    useUsageStore.setState({ plan: 'business', limits: PLAN_LIMITS.business, requests: 1_000 });
     renderScreen();
 
-    expect(textOf('usage-gauge-requests-value')).toBe('0%');
+    expect(textOf('usage-gauge-requests-value')).toBe('50%');
   });
 
   it('offers the upgrade CTA to free users and routes it to /upgrade', () => {
