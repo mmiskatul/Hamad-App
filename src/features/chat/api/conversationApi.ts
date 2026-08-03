@@ -140,11 +140,17 @@ export async function refreshConversation(conversationId: string): Promise<Conve
   const existing = useChatStore.getState().conversations.find(
     (conversation) => conversation.id === conversationId,
   );
+  const feedbackByMessageId = new Map(
+    (existing?.messages ?? []).map((message) => [message.id, message.feedback]),
+  );
   return replaceConversationInStore(
     toConversation(
       response.conversation,
       existing,
-      response.messages.map((message) => toMessage(conversationId, message)),
+      response.messages.map((message) => {
+        const mapped = toMessage(conversationId, message);
+        return { ...mapped, feedback: feedbackByMessageId.get(mapped.id) };
+      }),
     ),
   );
 }

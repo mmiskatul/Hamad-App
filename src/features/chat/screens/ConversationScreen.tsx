@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, View, type ListRenderItem } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -383,6 +383,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
   const thinkingFor = useChatStore((state) => state.thinkingFor);
   const streamingId = useChatStore((state) => state.streamingId);
   const finishStreaming = useChatStore((state) => state.finishStreaming);
+  const setMessageFeedback = useChatStore((state) => state.setMessageFeedback);
   const renameConversation = useChatStore((state) => state.renameConversation);
   const togglePinned = useChatStore((state) => state.togglePinned);
   const deleteConversation = useChatStore((state) => state.deleteConversation);
@@ -422,7 +423,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
     scrollRefFlat.current?.scrollToEnd({ animated: false });
   }, []);
 
-  const messages = conversation?.messages ?? [];
+  const messages = useMemo(() => conversation?.messages ?? [], [conversation?.messages]);
 
   useEffect(() => {
     void refreshConversationAttachments(id).catch(() => {});
@@ -563,7 +564,21 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
       Alert.alert('Upload failed', error instanceof Error ? error.message : 'The file could not be uploaded.');
     }
   }, [id]);
-  const onRegenerate = useCallback(() => {}, []);
+  const onRegenerate = useCallback(
+    (assistantMessageId: string) => {
+      if (thinking) return;
+      const assistantIndex = messages.findIndex((message) => message.id === assistantMessageId);
+      if (assistantIndex < 0) return;
+      for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+        const message = messages[index];
+        if (message?.role === 'user') {
+          onSend(message.text);
+          return;
+        }
+      }
+    },
+    [messages, onSend, thinking],
+  );
   const onHeaderMenuPress = useCallback(() => setSurface('menu'), []);
   const onNewChat = useCallback(() => {
     setSurface('none');
@@ -673,11 +688,21 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
           animate={item.id === streamingId}
           onRevealed={finishStreaming}
           onRevealProgress={item.id === streamingId ? followStreamingReply : undefined}
-          onRegenerate={onRegenerate}
+          feedback={item.feedback}
+          onFeedbackChange={(feedback) => setMessageFeedback(id, item.id, feedback)}
+          onRegenerate={() => onRegenerate(item.id)}
           testID={`message-${item.id}`}
         />
       ),
-    [i18n.language, streamingId, finishStreaming, followStreamingReply, onRegenerate],
+    [
+      i18n.language,
+      streamingId,
+      finishStreaming,
+      followStreamingReply,
+      id,
+      onRegenerate,
+      setMessageFeedback,
+    ],
   );
   const ListFooter = useCallback(() => (thinking ? <ThinkingIndicator /> : null), [thinking]);
 

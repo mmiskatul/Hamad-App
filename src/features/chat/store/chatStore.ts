@@ -34,6 +34,8 @@ export type ChatMessage = {
   text: string;
   at: number;
   generatedImages?: ChatAttachment[];
+  /** The user's rating for an assistant response. Persisted with the transcript. */
+  feedback?: 'up' | 'down';
 };
 
 /*
@@ -119,6 +121,11 @@ export type ChatState = {
   createAttachmentConversation: (title: string) => Conversation;
   /** Append the assistant's reply and mark it as the one to reveal. */
   receiveReply: (conversationId: string, text: string) => void;
+  setMessageFeedback: (
+    conversationId: string,
+    messageId: string,
+    feedback: 'up' | 'down' | undefined,
+  ) => void;
   /** The reveal finished (or was skipped). */
   finishStreaming: () => void;
   /** Park the current conversation and start an empty one. */
@@ -335,6 +342,22 @@ export const useChatStore = create<ChatState>()(
           streamingId: message.id,
         });
       },
+
+      setMessageFeedback: (conversationId, messageId, feedback) =>
+        set({
+          conversations: get().conversations.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  messages: conversation.messages.map((message) =>
+                    message.id === messageId && message.role === 'assistant'
+                      ? { ...message, feedback }
+                      : message,
+                  ),
+                }
+              : conversation,
+          ),
+        }),
 
       finishStreaming: () => set({ streamingId: null }),
 

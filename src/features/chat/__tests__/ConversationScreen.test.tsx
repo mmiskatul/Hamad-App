@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -89,6 +90,7 @@ beforeAll(async () => {
 
 beforeEach(() => {
   jest.useFakeTimers();
+  jest.mocked(Clipboard.setStringAsync).mockClear();
   mockPush.mockClear();
   mockBack.mockClear();
   mockReplace.mockClear();
@@ -258,6 +260,58 @@ describe('ConversationScreen', () => {
     fireEvent.press(screen.getByLabelText('Open generated.png'));
 
     expect(screen.getByLabelText('Close image preview')).toBeTruthy();
+  });
+
+  it('persists an exclusive like or dislike for an assistant response', () => {
+    useChatStore.setState({
+      conversations: [conversation({ messages: [
+        { id: 'm1', role: 'user', text: 'Help me plan', at: 1000 },
+        { id: 'm2', role: 'assistant', text: 'Here is a plan.', at: 1001 },
+      ] })],
+    });
+    renderScreen();
+
+    fireEvent.press(screen.getByTestId('message-m2-like'));
+    expect(useChatStore.getState().conversations[0].messages[1].feedback).toBe('up');
+
+    fireEvent.press(screen.getByTestId('message-m2-dislike'));
+    expect(useChatStore.getState().conversations[0].messages[1].feedback).toBe('down');
+
+    fireEvent.press(screen.getByTestId('message-m2-dislike'));
+    expect(useChatStore.getState().conversations[0].messages[1].feedback).toBeUndefined();
+  });
+
+  it('copies an assistant response to the device clipboard', () => {
+    useChatStore.setState({
+      conversations: [conversation({ messages: [
+        { id: 'm1', role: 'user', text: 'Help me plan', at: 1000 },
+        { id: 'm2', role: 'assistant', text: 'Here is a plan.', at: 1001 },
+      ] })],
+    });
+    renderScreen();
+
+    fireEvent.press(screen.getByTestId('message-m2-copy'));
+
+    expect(Clipboard.setStringAsync).toHaveBeenCalledWith('Here is a plan.');
+  });
+
+  it('regenerates from the user prompt immediately before the selected response', () => {
+    useChatStore.setState({
+      conversations: [conversation({ messages: [
+        { id: 'm1', role: 'user', text: 'Help me plan', at: 1000 },
+        { id: 'm2', role: 'assistant', text: 'Here is a plan.', at: 1001 },
+      ] })],
+    });
+    renderScreen();
+
+    fireEvent.press(screen.getByTestId('message-m2-regenerate'));
+
+    const state = useChatStore.getState();
+    expect(state.conversations[0].messages.at(-1)).toMatchObject({
+      role: 'user',
+      text: 'Help me plan',
+    });
+    expect(state.thinkingFor).toBe('c1');
   });
 
   it('opens the model sheet from the header pill', () => {

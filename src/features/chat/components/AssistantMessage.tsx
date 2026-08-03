@@ -23,11 +23,9 @@ import type { ChatAttachment } from '../store/chatStore';
  * state, and a reply that keeps spinning after it has arrived says the opposite
  * of what it means.
  *
- * FEEDBACK IS LOCAL AND EXCLUSIVE: thumbs up and down are one choice, not two
- * toggles, and tapping the active one clears it. Nothing is sent anywhere yet.
- *
- * TODO(backend): feedback needs a rating endpoint, and regenerate must re-run
- * the prompt through backend/src/ai/routing.service.ts.
+ * FEEDBACK IS EXCLUSIVE: thumbs up and down are one choice, not two toggles,
+ * and tapping the active one clears it. The parent owns the value so it remains
+ * selected when FlatList recycles this row.
  */
 const MARK_SCALE = 16 / 55; // Figma draws the 55pt mark at 16pt here.
 const ACTION_GLYPH = 16;
@@ -43,10 +41,12 @@ export type AssistantMessageProps = {
   onRevealed?: () => void;
   onRevealProgress?: () => void;
   onRegenerate?: () => void;
+  feedback?: 'up' | 'down';
+  onFeedbackChange?: (feedback: 'up' | 'down' | undefined) => void;
   testID?: string;
 };
 
-type Feedback = 'none' | 'up' | 'down';
+type Feedback = 'up' | 'down';
 
 function AssistantMessage({
   text,
@@ -56,12 +56,13 @@ function AssistantMessage({
   onRevealed,
   onRevealProgress,
   onRegenerate,
+  feedback,
+  onFeedbackChange,
   testID,
 }: AssistantMessageProps): React.JSX.Element {
   const theme = useTheme();
   const { t } = useTranslation();
 
-  const [feedback, setFeedback] = useState<Feedback>('none');
   const [copied, setCopied] = useState(false);
 
   const onCopy = useCallback(() => {
@@ -73,8 +74,8 @@ function AssistantMessage({
   }, [text]);
 
   const vote = useCallback(
-    (next: Exclude<Feedback, 'none'>) => setFeedback(current => (current === next ? 'none' : next)),
-    [],
+    (next: Feedback) => onFeedbackChange?.(feedback === next ? undefined : next),
+    [feedback, onFeedbackChange],
   );
 
   return (
