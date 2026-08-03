@@ -1,4 +1,4 @@
-import { apiRequest } from '../client';
+import { apiRequest, refreshCurrentAuthSession } from '../client';
 import {
   clearAuthSession,
   clearAuthSessionMemoryCache,
@@ -152,4 +152,20 @@ it('clears the persisted session when the refresh token is rejected', async () =
   await expect(readAuthSession()).resolves.toBeNull();
   expect(invalidated).toHaveBeenCalledTimes(1);
   unsubscribe();
+});
+
+it('can force refresh-token validation before protected screens open', async () => {
+  const refreshedSession: AuthSession = {
+    ...initialSession,
+    accessToken: 'startup-access-token',
+    refreshToken: 'rt_startup-rotated-token-value',
+  };
+  await saveAuthSession(initialSession);
+  fetchMock.mockResolvedValueOnce(jsonResponse(refreshedSession));
+
+  await expect(refreshCurrentAuthSession()).resolves.toEqual(refreshedSession);
+
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0]?.[0]).toBe('http://api.test/api/v1/auth/refresh');
+  await expect(readAuthSession()).resolves.toEqual(refreshedSession);
 });

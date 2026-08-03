@@ -5,9 +5,10 @@ import { useModelStore } from '@/shared/models';
 import { DEFAULT_PLAN, usePlanStore } from '@/shared/plan';
 import { useProfileStore } from '@/shared/profile';
 import { useUsageStore } from '@/shared/usage';
-import { useAuthFlowStore } from '@/features/auth';
-import { DEFAULT_MODEL, useChatStore } from '@/features/chat';
-import { useProjectStore } from '@/features/projects';
+import { useAuthFlowStore } from '@/features/auth/store/authFlowStore';
+import { DEFAULT_MODEL } from '@/features/chat/constants';
+import { useChatStore } from '@/features/chat/store/chatStore';
+import { useProjectStore } from '@/features/projects/store/projectStore';
 
 /**
  * Revoke the current backend session and remove every account-specific cache.

@@ -8,9 +8,9 @@ import type { AuthSession } from '@/shared/auth';
 /*
  * "/" — the splash route, and the app's entry point.
  *
- * Requirement (user, 2026-07-20): splash first, then onboarding immediately
- * after. This route renders the animated brand splash while bootstrap work runs
- * (i18n today; keychain session restore later), then hands off.
+ * The route renders the animated brand splash while bootstrap work runs,
+ * validates the encrypted session, then hands off to home or login. Protected
+ * screens are never mounted before that server-backed check completes.
  *
  * <Redirect> rather than router.replace() in an effect: Redirect runs during
  * render, so there is no frame where the splash has finished but the next route
@@ -18,8 +18,8 @@ import type { AuthSession } from '@/shared/auth';
  * splash is not left on the back stack — an Android back press from onboarding
  * exits the app instead of replaying the boot animation.
  *
- * When auth state exists (tracker FUTURE #3) this is the natural place to fork:
- *   return <Redirect href={session ? '/(tabs)' : '/onboarding'} />;
+ * Onboarding remains an explicit auth-flow route; missing, expired, or rejected
+ * credentials always land on login.
  */
 /*
  * Feature-owned boot work, injected here because this route is the composition
@@ -41,7 +41,7 @@ export default function SplashRoute(): React.JSX.Element {
   );
   const { booted } = useAppBootstrap(bootTasks);
 
-  if (booted) return <Redirect href={session ? '/home' : '/onboarding'} />;
+  if (booted) return <Redirect href={session ? '/home' : '/login'} />;
 
   return <SplashScreen />;
 }

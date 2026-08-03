@@ -124,6 +124,16 @@ function combineSignals(first: AbortSignal | null | undefined, second: AbortSign
 
 let refreshPromise: Promise<AuthSession> | null = null;
 
+/** Force validation and rotation of the refresh token stored for this device. */
+export async function refreshCurrentAuthSession(): Promise<AuthSession> {
+  const session = await readAuthSession();
+  if (!session) {
+    await invalidateAuthSession();
+    throw new ApiError(401, 'AUTH_SESSION_MISSING', 'Please sign in again.');
+  }
+  return refreshAuthSession(session);
+}
+
 async function refreshAuthSession(session: AuthSession): Promise<AuthSession> {
   if (refreshPromise) return refreshPromise;
 
