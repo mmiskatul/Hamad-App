@@ -14,14 +14,28 @@ export default function ConversationAttachments({
   attachments: readonly ChatAttachment[];
 }): React.JSX.Element | null {
   const theme = useTheme();
-  const [headers, setHeaders] = useState<Record<string, string>>({});
+  const [headers, setHeaders] = useState<Record<string, string> | undefined>(undefined);
   const [preview, setPreview] = useState<ChatAttachment | null>(null);
 
   useEffect(() => {
-    if (attachments.some((item) => item.mimeType.startsWith('image/'))) {
-      void attachmentAuthHeaders().then(setHeaders);
+    let active = true;
+    const hasImages = attachments.some((item) => item.mimeType.startsWith('image/'));
+    if (hasImages) {
+      void attachmentAuthHeaders().then((resolved) => {
+        if (active) setHeaders(resolved);
+      });
+    } else {
+      if (active) setHeaders({});
     }
+    return () => {
+      active = false;
+    };
   }, [attachments]);
+
+  if (!attachments.length) return null;
+
+  const hasImages = attachments.some((item) => item.mimeType.startsWith('image/'));
+  if (hasImages && !headers) return null;
 
   const open = useCallback(async (attachment: ChatAttachment) => {
     try {
@@ -31,8 +45,6 @@ export default function ConversationAttachments({
       Alert.alert('Could not open file', error instanceof Error ? error.message : 'Please try again.');
     }
   }, []);
-
-  if (!attachments.length) return null;
 
   return (
     <>
