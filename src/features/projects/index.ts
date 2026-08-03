@@ -29,3 +29,9 @@ export {
   type ProjectScope,
   type ProjectSource,
 } from './store/projectStore';
+export { refreshProjects } from './projectApi';
+export {
+  deleteProject,
+  projectErrorMessage,
+  updateProject,
+} from './projectApi';

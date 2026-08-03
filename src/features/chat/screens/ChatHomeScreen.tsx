@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Alert, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useShallow } from 'zustand/react/shallow';
@@ -8,7 +8,11 @@ import {
   deleteConversation as deleteConversationRemote,
   refreshConversations,
   updateConversation as updateConversationRemote,
+  createConversationForAttachment,
+  uploadConversationAttachment,
 } from '../api/conversationApi';
+import { pickAttachment } from '../api/attachments';
+import type { AttachmentSource } from '../components/AttachmentMenu';
 import AttachmentMenu from '../components/AttachmentMenu';
 import ChatComposer from '../components/ChatComposer';
 import ChatDrawer from '../components/ChatDrawer';
@@ -29,6 +33,7 @@ import { ApiError } from '@/shared/api/client';
 import { useTranslation } from '@/shared/i18n/useTranslation';
 import { useCanUpgrade } from '@/shared/plan';
 import { useTheme } from '@/shared/theme';
+import { logoutCurrentSession } from '@/services/logout';
 
 const SCREEN_PADDING = 16;
 const TOP_BAR_TOP = 22;
@@ -62,6 +67,7 @@ export default function ChatHomeScreen(): React.JSX.Element {
   const renameConversation = useChatStore((state) => state.renameConversation);
   const togglePinned = useChatStore((state) => state.togglePinned);
   const deleteConversation = useChatStore((state) => state.deleteConversation);
+  const createAttachmentConversation = useChatStore((state) => state.createAttachmentConversation);
 
   const canUpgrade = useCanUpgrade();
 
@@ -87,9 +93,18 @@ export default function ChatHomeScreen(): React.JSX.Element {
   const onVoice = useCallback(() => {
     // TODO(backend): voice input is a Pro/Business feature and still needs the speech module.
   }, []);
-  const onPickAttachment = useCallback(() => {
-    // TODO(backend): file upload still needs a picker + upload endpoint.
-  }, []);
+  const onPickAttachment = useCallback(async (source: AttachmentSource) => {
+    try {
+      const file = await pickAttachment(source);
+      if (!file) return;
+      const conversation = createAttachmentConversation(file.name);
+      await createConversationForAttachment(conversation);
+      await uploadConversationAttachment(conversation.id, file);
+      router.push('/conversation');
+    } catch (error) {
+      Alert.alert('Upload failed', error instanceof Error ? error.message : 'The file could not be uploaded.');
+    }
+  }, [createAttachmentConversation, router]);
   const onSeeAll = useCallback(() => {
     closeSurface();
     router.push('/chat-history');
@@ -232,6 +247,15 @@ export default function ChatHomeScreen(): React.JSX.Element {
     router.push('/profile');
   }, [closeSurface, router]);
 
+  const signOut = useCallback(async () => {
+    closeSurface();
+    try {
+      await logoutCurrentSession();
+    } finally {
+      router.replace('/login');
+    }
+  }, [closeSurface, router]);
+
   const dismissUpsell = useCallback(() => {
     markUpsellSeen();
     closeSurface();
@@ -292,6 +316,7 @@ export default function ChatHomeScreen(): React.JSX.Element {
         onNewChat={onNewChat}
         onUpgrade={openUpgrade}
         onAccount={openAccount}
+        onSignOut={signOut}
         onSeeAll={onSeeAll}
         onProjects={onProjects}
         onOpenConversation={onOpenConversation}

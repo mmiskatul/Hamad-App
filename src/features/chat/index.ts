@@ -32,3 +32,4 @@ export {
   UPSELL_AFTER_PROMPTS,
 } from './store/chatStore';
 export type { Conversation, ChatMessage, ChatAttachment } from './store/chatStore';
+export { refreshConversations } from './api/conversationApi';

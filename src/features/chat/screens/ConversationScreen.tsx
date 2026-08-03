@@ -1,14 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { FlatList, View, type ListRenderItem } from 'react-native';
+import { Alert, FlatList, View, type ListRenderItem } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MoreHorizontalIcon } from '@hugeicons/core-free-icons';
 import { useShallow } from 'zustand/react/shallow';
 
-import { deleteConversation as deleteConversationRemote } from '../api/conversationApi';
+import {
+  deleteConversation as deleteConversationRemote,
+  refreshConversations,
+  updateConversation as updateConversationRemote,
+  createConversationForAttachment,
+  uploadConversationAttachment,
+  refreshConversationAttachments,
+} from '../api/conversationApi';
+import { pickAttachment } from '../api/attachments';
 import AssistantMessage from '../components/AssistantMessage';
-import AttachmentMenu from '../components/AttachmentMenu';
+import AttachmentMenu, { type AttachmentSource } from '../components/AttachmentMenu';
 import ChatComposer from '../components/ChatComposer';
+import ConversationAttachments from '../components/ConversationAttachments';
 import ChatDrawer from '../components/ChatDrawer';
 import ChatHeader from '../components/ChatHeader';
 import ChatMenu, { type ChatMenuAction } from '../components/ChatMenu';
@@ -22,8 +31,14 @@ import UserBubble from '../components/UserBubble';
 import { findModel } from '../constants';
 import { useSendPrompt } from '../hooks/useSendPrompt';
 import { useChatStore, type ChatMessage } from '../store/chatStore';
-import { ProjectMenu, useProjectStore, type ProjectMenuAction } from '@/features/projects';
-import { deleteProject as deleteProjectRequest, projectErrorMessage, updateProject as updateProjectRequest } from '@/features/projects/projectApi';
+import {
+  deleteProject as deleteProjectRequest,
+  ProjectMenu,
+  projectErrorMessage,
+  updateProject as updateProjectRequest,
+  useProjectStore,
+  type ProjectMenuAction,
+} from '@/features/projects';
 
 import { readAuthSession } from '@/shared/auth';
 import { ApiError } from '@/shared/api/client';
@@ -33,6 +48,7 @@ import { useTranslation } from '@/shared/i18n/useTranslation';
 import { AppText } from '@/shared/ui/AppText';
 import IconPillButton from '@/shared/ui/IconPillButton';
 import KeyboardAvoider from '@/shared/ui/KeyboardAvoider';
+import { logoutCurrentSession } from '@/services/logout';
 
 /*
  * The conversation view (Figma 428:1424 Chat history, 144:1314 thinking, 146:1652 answered).
@@ -89,6 +105,7 @@ function FreshProjectChatContent({
   const setModel = useChatStore((state) => state.setModel);
   const startNewChat = useChatStore((state) => state.startNewChat);
   const openConversation = useChatStore((state) => state.openConversation);
+  const createAttachmentConversation = useChatStore((state) => state.createAttachmentConversation);
 
   // Read the project so the menu flips to "Unpin" once toggled, matching the
   // menu shown from the projects list (Figma 404:1915 / 404:1940).
@@ -201,7 +218,17 @@ function FreshProjectChatContent({
   const openModels = useCallback(() => setSurface('models'), []);
   const onAttach = useCallback(() => setSurface('attach'), []);
   const onVoice = useCallback(() => {}, []);
-  const onPick = useCallback(() => {}, []);
+  const onPick = useCallback(async (source: AttachmentSource) => {
+    try {
+      const file = await pickAttachment(source);
+      if (!file) return;
+      const conversation = createAttachmentConversation(file.name);
+      await createConversationForAttachment(conversation);
+      await uploadConversationAttachment(conversation.id, file);
+    } catch (error) {
+      Alert.alert('Upload failed', error instanceof Error ? error.message : 'The file could not be uploaded.');
+    }
+  }, [createAttachmentConversation]);
   const onNewChat = useCallback(() => {
     setSurface('none');
     startNewChat();
@@ -214,6 +241,14 @@ function FreshProjectChatContent({
   const onAccount = useCallback(() => {
     setSurface('none');
     router.push('/profile');
+  }, [router]);
+  const onSignOut = useCallback(async () => {
+    setSurface('none');
+    try {
+      await logoutCurrentSession();
+    } finally {
+      router.replace('/login');
+    }
   }, [router]);
   const onSeeAll = useCallback(() => {
     setSurface('none');
@@ -303,6 +338,7 @@ function FreshProjectChatContent({
         onNewChat={onNewChat}
         onUpgrade={onUpgrade}
         onAccount={onAccount}
+        onSignOut={onSignOut}
         onSeeAll={onSeeAll}
         onProjects={onProjects}
         onOpenConversation={onOpenConversation}
@@ -388,6 +424,10 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
 
   const messages = conversation?.messages ?? [];
 
+  useEffect(() => {
+    void refreshConversationAttachments(id).catch(() => {});
+  }, [id]);
+
   const keyExtractor = useCallback((message: ChatMessage) => message.id, []);
 
   useEffect(() => {
@@ -413,9 +453,14 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
         case 'rename':
           setSurface('rename');
           return;
-        case 'pin':
+        case 'pin': {
+          const nextPinned = !(conversation?.pinned ?? false);
           togglePinned(id);
+          updateConversationRemote(id, { pinned: nextPinned }).catch(() => {
+            refreshConversations();
+          });
           break;
+        }
         case 'files':
           openConversation(id);
           router.push('/chat-files');
@@ -428,7 +473,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
           return;
       }
     },
-    [startNewChat, router, togglePinned, id, openConversation],
+    [conversation?.pinned, startNewChat, router, togglePinned, id, openConversation],
   );
 
   /*
@@ -500,7 +545,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
           break;
       }
     },
-    [deleteConversation, id, projectId, projectRecord?.pinned, removeProjectRecord, router, setEditingId, setProjectError, upsertProject],
+    [deleteConversation, id, projectId, projectRecord, removeProjectRecord, router, setEditingId, setProjectError, upsertProject],
   );
 
   const closeSurface = useCallback(() => setSurface('none'), []);
@@ -509,7 +554,15 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
   const openPlan = useCallback(() => setSurface('plan'), []);
   const onAttach = useCallback(() => setSurface('attach'), []);
   const onVoice = useCallback(() => {}, []);
-  const onPick = useCallback(() => {}, []);
+  const onPick = useCallback(async (source: AttachmentSource) => {
+    try {
+      const file = await pickAttachment(source);
+      if (!file) return;
+      await uploadConversationAttachment(id, file);
+    } catch (error) {
+      Alert.alert('Upload failed', error instanceof Error ? error.message : 'The file could not be uploaded.');
+    }
+  }, [id]);
   const onRegenerate = useCallback(() => {}, []);
   const onHeaderMenuPress = useCallback(() => setSurface('menu'), []);
   const onNewChat = useCallback(() => {
@@ -524,6 +577,14 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
   const onAccount = useCallback(() => {
     setSurface('none');
     router.push('/profile');
+  }, [router]);
+  const onSignOut = useCallback(async () => {
+    setSurface('none');
+    try {
+      await logoutCurrentSession();
+    } finally {
+      router.replace('/login');
+    }
   }, [router]);
   const onSeeAll = useCallback(() => {
     setSurface('none');
@@ -556,7 +617,12 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
   );
   const onRenameDismiss = useCallback(() => setSurface('none'), []);
   const onRenameSubmit = useCallback(
-    (title: string) => renameConversation(id, title),
+    (title: string) => {
+      renameConversation(id, title);
+      updateConversationRemote(id, { title }).catch(() => {
+        refreshConversations();
+      });
+    },
     [renameConversation, id],
   );
   const onDeleteDismiss = useCallback(() => {
@@ -685,6 +751,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
 
           {/* Quota + composer */}
           <View style={{ paddingHorizontal: SCREEN_PADDING, gap: 0 }}>
+            <ConversationAttachments attachments={conversation.attachments} />
             <UsageChip onPress={openPlan} expanded={surface === 'plan'} />
             <ChatComposer
               value={draft}
@@ -716,6 +783,7 @@ function ConversationContent({ id }: { id: string }): React.JSX.Element {
         onNewChat={onNewChat}
         onUpgrade={onUpgradeDrawer}
         onAccount={onAccount}
+        onSignOut={onSignOut}
         onSeeAll={onSeeAll}
         onProjects={onProjects}
         onOpenConversation={onOpenConversation}

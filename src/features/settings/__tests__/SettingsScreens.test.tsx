@@ -174,13 +174,13 @@ describe('profile hub', () => {
     expect(mockPush).toHaveBeenCalledWith('/about');
   });
 
-  it('revokes the session and replaces the app with onboarding on logout', async () => {
+  it('revokes the session and replaces the app with login on logout', async () => {
     renderScreen(<ProfileScreen />);
 
     fireEvent.press(screen.getByTestId('settings-logout'));
 
     await waitFor(() => expect(logoutMock).toHaveBeenCalledTimes(1));
-    expect(mockReplace).toHaveBeenCalledWith('/onboarding');
+    expect(mockReplace).toHaveBeenCalledWith('/login');
   });
 });
 

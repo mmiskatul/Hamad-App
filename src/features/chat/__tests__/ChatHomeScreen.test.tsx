@@ -14,6 +14,7 @@ import { useChatStore, UPSELL_AFTER_PROMPTS } from '../store/chatStore';
 import { initI18n } from '@/shared/i18n';
 import { usePlanStore } from '@/shared/plan';
 import { THEMES, ThemeProvider, useThemeStore, type ThemeMode } from '@/shared/theme';
+import { logoutCurrentSession } from '@/services/logout';
 
 /*
  * Chat home (Figma 404:1772 empty state, 404:804 with the drawer). Covers the
@@ -22,19 +23,24 @@ import { THEMES, ThemeProvider, useThemeStore, type ThemeMode } from '@/shared/t
  */
 
 const mockPush = jest.fn();
+const mockReplace = jest.fn();
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ push: mockPush }),
+  useRouter: () => ({ push: mockPush, replace: mockReplace }),
 }));
+jest.mock('@/services/logout', () => ({ logoutCurrentSession: jest.fn() }));
 jest.mock('../api/requestReply', () => ({ requestReply: jest.fn() }));
 jest.mock('../api/conversationApi', () => ({
   deleteConversation: jest.fn(),
   refreshConversations: jest.fn(() => Promise.resolve([])),
+  createConversationForAttachment: jest.fn(() => Promise.resolve()),
+  uploadConversationAttachment: jest.fn(() => Promise.resolve()),
   updateConversation: jest.fn(() => Promise.resolve()),
 }));
 
 const requestReplyMock = requestReply as jest.MockedFunction<typeof requestReply>;
 const deleteConversationRemoteMock = jest.mocked(deleteConversationRemote);
 const refreshConversationsMock = jest.mocked(refreshConversations);
+const logoutCurrentSessionMock = jest.mocked(logoutCurrentSession);
 
 const metrics = {
   frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -74,6 +80,9 @@ beforeAll(async () => {
 
 beforeEach(() => {
   mockPush.mockClear();
+  mockReplace.mockClear();
+  logoutCurrentSessionMock.mockReset();
+  logoutCurrentSessionMock.mockResolvedValue();
   requestReplyMock.mockReset();
   requestReplyMock.mockReturnValue(new Promise(() => undefined));
   deleteConversationRemoteMock.mockReset();
@@ -115,6 +124,16 @@ it('renders the welcome hero, model pill and composer', () => {
   expect(screen.getByText('Upgrade to Pro')).toBeTruthy();
   expect(screen.getByText(findModel(DEFAULT_MODEL).name)).toBeTruthy();
   expect(screen.getByTestId('chat-composer-input')).toBeTruthy();
+});
+
+it('signs out from the drawer and returns to login', async () => {
+  renderScreen();
+
+  fireEvent.press(screen.getByTestId('chat-menu'));
+  fireEvent.press(screen.getByTestId('drawer-sign-out'));
+
+  await waitFor(() => expect(logoutCurrentSessionMock).toHaveBeenCalledTimes(1));
+  expect(mockReplace).toHaveBeenCalledWith('/login');
 });
 
 describe('composer', () => {

@@ -4,7 +4,10 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import ConversationScreen from '../screens/ConversationScreen';
-import { deleteConversation as deleteConversationRemote } from '../api/conversationApi';
+import {
+  deleteConversation as deleteConversationRemote,
+  updateConversation as updateConversationRemote,
+} from '../api/conversationApi';
 import { migrateChatState, useChatStore, type Conversation } from '../store/chatStore';
 
 import { useProjectStore, type Project } from '@/features/projects';
@@ -27,6 +30,10 @@ const mockReplace = jest.fn();
 const mockRedirect = jest.fn();
 jest.mock('../api/conversationApi', () => ({
   deleteConversation: jest.fn(),
+  refreshConversations: jest.fn(() => Promise.resolve([])),
+  refreshConversationAttachments: jest.fn(() => Promise.resolve([])),
+  createConversationForAttachment: jest.fn(() => Promise.resolve()),
+  uploadConversationAttachment: jest.fn(() => Promise.resolve()),
   updateConversation: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('expo-router', () => ({
@@ -43,6 +50,7 @@ jest.mock('expo-router', () => ({
 }));
 
 const mockDeleteConversationRemote = jest.mocked(deleteConversationRemote);
+const mockUpdateConversationRemote = jest.mocked(updateConversationRemote);
 
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(() => Promise.resolve()) }));
 
@@ -87,6 +95,8 @@ beforeEach(() => {
   mockRedirect.mockClear();
   mockDeleteConversationRemote.mockReset();
   mockDeleteConversationRemote.mockResolvedValue();
+  mockUpdateConversationRemote.mockReset();
+  mockUpdateConversationRemote.mockResolvedValue(conversation());
   usePlanStore.setState({ plan: 'free', hasHydrated: true });
   useUsageStore.setState({ requests: 0, tokens: 0, byModel: {}, hasHydrated: true });
   useProjectStore.setState({
@@ -246,6 +256,42 @@ describe('ConversationScreen', () => {
 
     await waitFor(() => expect(mockDeleteConversationRemote).toHaveBeenCalledWith('c1'));
     await waitFor(() => expect(useChatStore.getState().conversations).toHaveLength(0));
+    expect(mockReplace).toHaveBeenCalledWith('/home');
+  });
+
+  it('persists rename and pin actions from the chat menu', async () => {
+    renderScreen();
+
+    fireEvent.press(screen.getByTestId('conversation-menu'));
+    fireEvent.press(screen.getByTestId('chat-menu-rename'));
+    fireEvent.changeText(screen.getByTestId('rename-chat-input'), 'Renamed remotely');
+    fireEvent.press(screen.getByTestId('rename-chat-save'));
+
+    await waitFor(() =>
+      expect(mockUpdateConversationRemote).toHaveBeenCalledWith('c1', {
+        title: 'Renamed remotely',
+      }),
+    );
+
+    fireEvent.press(screen.getByTestId('conversation-menu'));
+    fireEvent.press(screen.getByTestId('chat-menu-pin'));
+
+    await waitFor(() =>
+      expect(mockUpdateConversationRemote).toHaveBeenCalledWith('c1', { pinned: true }),
+    );
+    expect(useChatStore.getState().conversations[0].pinned).toBe(true);
+  });
+
+  it('opens files and starts a new chat from the chat menu', () => {
+    renderScreen();
+
+    fireEvent.press(screen.getByTestId('conversation-menu'));
+    fireEvent.press(screen.getByTestId('chat-menu-files'));
+    expect(mockPush).toHaveBeenCalledWith('/chat-files');
+
+    fireEvent.press(screen.getByTestId('conversation-menu'));
+    fireEvent.press(screen.getByTestId('chat-menu-new'));
+    expect(useChatStore.getState().activeId).toBeNull();
     expect(mockReplace).toHaveBeenCalledWith('/home');
   });
 

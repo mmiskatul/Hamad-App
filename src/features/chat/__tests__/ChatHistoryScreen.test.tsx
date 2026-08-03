@@ -25,6 +25,8 @@ const mockPush = jest.fn();
 jest.mock('../api/conversationApi', () => ({
   deleteConversation: jest.fn(),
   refreshConversations: jest.fn(() => Promise.resolve([])),
+  refreshConversationAttachments: jest.fn(() => Promise.resolve([])),
+  deleteConversationAttachment: jest.fn(() => Promise.resolve()),
   updateConversation: jest.fn(() => Promise.resolve()),
 }));
 jest.mock('expo-router', () => ({
@@ -206,7 +208,14 @@ describe('files in chat', () => {
       conversations: [
         conversation({
           attachments: [
-            { id: 'a1', name: 'IMG_0001.jpg', at: Date.UTC(2026, 11, 7, 21, 48), uri: null },
+            {
+              id: 'a1',
+              name: 'IMG_0001.jpg',
+              at: Date.UTC(2026, 11, 7, 21, 48),
+              uri: null,
+              mimeType: 'image/jpeg',
+              size: 0,
+            },
           ],
         }),
       ],

@@ -49,6 +49,7 @@ jest.mock('@/features/chat', () => {
     UpgradePlanScreen: () => React.createElement(View, { testID: 'upgrade-screen' }),
     ChatHistoryScreen: () => React.createElement(View, { testID: 'chat-history-screen' }),
     ChatFilesScreen: () => React.createElement(View, { testID: 'chat-files-screen' }),
+    refreshConversations: () => Promise.resolve(),
     // The /projects route is a composition root: it reads the chat store so a
     // project row can start a chat scoped to that project. A mocked feature
     // must still supply everything a ROUTE pulls from it, not just its screens.
@@ -84,6 +85,7 @@ jest.mock('@/features/projects', () => {
     ProjectInstructionsScreen: () =>
       React.createElement(View, { testID: 'project-instructions-screen' }),
     ProjectSourcesScreen: () => React.createElement(View, { testID: 'project-sources-screen' }),
+    refreshProjects: () => Promise.resolve(),
   };
 });
 
@@ -99,7 +101,7 @@ jest.mock('@/features/dashboard', () => {
 describe('app routing', () => {
   beforeEach(() => {
     mockRestoreAuthSession.mockReset();
-    mockRestoreAuthSession.mockResolvedValue(null);
+    mockRestoreAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
   });
   /*
    * REAL timers on purpose — do NOT add jest.useFakeTimers() here.
@@ -115,6 +117,7 @@ describe('app routing', () => {
    */
 
   it('opens on the splash route and lands on /onboarding once booted', async () => {
+    mockRestoreAuthSession.mockResolvedValue(null);
     renderRouter('src/app', { initialUrl: '/' });
 
     // Splash holds while bootstrap runs — no onboarding yet.
@@ -131,7 +134,6 @@ describe('app routing', () => {
   }, 20000);
 
   it('restores a persisted session and lands directly on /home', async () => {
-    mockRestoreAuthSession.mockResolvedValue({ user: { id: 'user-1' } });
     renderRouter('src/app', { initialUrl: '/' });
 
     expect(screen.getByTestId('splash-screen')).toBeTruthy();
@@ -193,6 +195,15 @@ describe('app routing', () => {
     await waitFor(() => expect(screen.getByTestId('chat-home-screen')).toBeTruthy());
     // The (app) group is parenthesised, so it adds no URL segment.
     expect(screen).toHavePathname('/home');
+  });
+
+  it('redirects a protected route to login when no session exists', async () => {
+    mockRestoreAuthSession.mockResolvedValue(null);
+    renderRouter('src/app', { initialUrl: '/home' });
+
+    await waitFor(() => expect(screen.getByTestId('login-screen')).toBeTruthy());
+    expect(screen.queryByTestId('chat-home-screen')).toBeNull();
+    expect(screen).toHavePathname('/login');
   });
 
   it('resolves /upgrade in the (app) group to the plan screen', async () => {

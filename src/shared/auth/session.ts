@@ -19,6 +19,7 @@ export type AuthSession = {
 
 const AUTH_SESSION_SERVICE = 'com.oneaihub.app.auth-session';
 let cachedSession: AuthSession | null | undefined;
+const invalidationListeners = new Set<() => void>();
 
 function isAuthSession(value: unknown): value is AuthSession {
   if (!value || typeof value !== 'object') return false;
@@ -67,6 +68,23 @@ export async function readAuthSession(): Promise<AuthSession | null> {
 export async function clearAuthSession(): Promise<void> {
   cachedSession = null;
   await Keychain.resetGenericPassword({ service: AUTH_SESSION_SERVICE });
+}
+
+/**
+ * Clear a session that the backend has definitively rejected and notify the
+ * mounted app shell so it can leave authenticated routes immediately.
+ */
+export async function invalidateAuthSession(): Promise<void> {
+  try {
+    await clearAuthSession();
+  } finally {
+    for (const listener of invalidationListeners) listener();
+  }
+}
+
+export function subscribeAuthSessionInvalidation(listener: () => void): () => void {
+  invalidationListeners.add(listener);
+  return () => invalidationListeners.delete(listener);
 }
 
 export function clearAuthSessionMemoryCache(): void {

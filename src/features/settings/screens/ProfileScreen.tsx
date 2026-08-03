@@ -225,7 +225,7 @@ export default function ProfileScreen(): React.JSX.Element {
               try {
                 await logoutCurrentSession();
               } finally {
-                router.replace('/onboarding');
+                router.replace('/login');
                 setLoggingOut(false);
               }
             }}

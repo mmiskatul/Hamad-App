@@ -4,6 +4,7 @@ import {
   clearAuthSessionMemoryCache,
   readAuthSession,
   saveAuthSession,
+  subscribeAuthSessionInvalidation,
   type AuthSession,
 } from '@/shared/auth';
 
@@ -38,6 +39,38 @@ beforeEach(async () => {
   process.env.EXPO_PUBLIC_API_BASE_URL = 'http://api.test/api/v1';
   await clearAuthSession();
   clearAuthSessionMemoryCache();
+});
+
+it('does not advertise JSON for a bodyless DELETE request', async () => {
+  await saveAuthSession(initialSession);
+  fetchMock.mockResolvedValueOnce(jsonResponse({}, 204));
+
+  await expect(
+    apiRequest('/conversations/conversation-1', {
+      method: 'DELETE',
+      authenticated: true,
+    }),
+  ).resolves.toEqual({});
+
+  const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+  expect(request.method).toBe('DELETE');
+  expect(request.body).toBeUndefined();
+  expect((request.headers as Headers).get('Content-Type')).toBeNull();
+  expect((request.headers as Headers).get('Authorization')).toBe(
+    `Bearer ${initialSession.accessToken}`,
+  );
+});
+
+it('keeps the JSON content type for string request bodies', async () => {
+  fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
+
+  await apiRequest('/example', {
+    method: 'POST',
+    body: JSON.stringify({ value: true }),
+  });
+
+  const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+  expect((request.headers as Headers).get('Content-Type')).toBe('application/json');
 });
 
 it('refreshes once after an expired access token and retries the protected request', async () => {
@@ -102,6 +135,8 @@ it('keeps the persisted session when refresh fails because the network is unavai
 
 it('clears the persisted session when the refresh token is rejected', async () => {
   await saveAuthSession(initialSession);
+  const invalidated = jest.fn();
+  const unsubscribe = subscribeAuthSessionInvalidation(invalidated);
   fetchMock
     .mockResolvedValueOnce(
       jsonResponse({ error: { code: 'TOKEN_EXPIRED', message: 'Expired' } }, 401),
@@ -115,4 +150,6 @@ it('clears the persisted session when the refresh token is rejected', async () =
     code: 'INVALID_SESSION',
   });
   await expect(readAuthSession()).resolves.toBeNull();
+  expect(invalidated).toHaveBeenCalledTimes(1);
+  unsubscribe();
 });

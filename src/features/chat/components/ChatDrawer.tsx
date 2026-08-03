@@ -67,6 +67,7 @@ export type ChatDrawerProps = {
   onUpgrade: () => void;
   /** Open the settings hub — the screen owns navigation, not the drawer. */
   onAccount: () => void;
+  onSignOut: () => void;
   /** Open the full history list ("See all"). */
   onSeeAll: () => void;
   /** Open the project list. */
@@ -87,6 +88,7 @@ function ChatDrawer({
   onNewChat,
   onUpgrade,
   onAccount,
+  onSignOut,
   onSeeAll,
   onProjects,
   onOpenConversation,
@@ -103,6 +105,7 @@ function ChatDrawer({
           onNewChat={onNewChat}
           onUpgrade={onUpgrade}
           onAccount={onAccount}
+          onSignOut={onSignOut}
           onSeeAll={onSeeAll}
           onProjects={onProjects}
           onOpenConversation={onOpenConversation}
@@ -119,6 +122,7 @@ function DrawerPanel({
   onNewChat,
   onUpgrade,
   onAccount,
+  onSignOut,
   onSeeAll,
   onProjects,
   onOpenConversation,
@@ -129,6 +133,7 @@ function DrawerPanel({
   onNewChat: () => void;
   onUpgrade: () => void;
   onAccount: () => void;
+  onSignOut: () => void;
   onSeeAll: () => void;
   onProjects: () => void;
   onOpenConversation: (id: string) => void;
@@ -470,7 +475,8 @@ function DrawerPanel({
             }}
             testID="drawer-sign-out"
             onPress={() => {
-              // TODO(backend): clear the session (keychain) and route to /login.
+              onDismiss();
+              onSignOut();
             }}
           >
             {/* Danger tone per the design — sign-out is the one destructive act here. */}

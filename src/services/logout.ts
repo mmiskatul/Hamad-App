@@ -30,7 +30,7 @@ export async function logoutCurrentSession(): Promise<void> {
   }
 }
 
-function clearAccountCaches(): void {
+export function clearAccountCaches(): void {
   useAuthFlowStore.getState().clearFlow();
   useProfileStore.getState().replaceProfile({ name: '', email: '', phone: '', avatarUri: null });
   usePlanStore.getState().setPlan(DEFAULT_PLAN);

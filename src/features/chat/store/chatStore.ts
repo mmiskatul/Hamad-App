@@ -20,7 +20,7 @@ import { DEFAULT_MODEL, type ModelId } from '../constants';
  */
 export const CHAT_STORAGE_KEY = 'oneai.chat';
 /* Bump with every shape change to Conversation, and add a migrate branch. */
-export const CHAT_STORAGE_VERSION = 4;
+export const CHAT_STORAGE_VERSION = 5;
 
 /* Show the upsell once the user has sent this many prompts in a session. */
 export const UPSELL_AFTER_PROMPTS = 2;
@@ -47,6 +47,8 @@ export type ChatAttachment = {
   at: number;
   /** Local or remote URI. Null until the upload endpoint exists. */
   uri: string | null;
+  mimeType: string;
+  size: number;
 };
 
 /*
@@ -112,6 +114,8 @@ export type ChatState = {
   sendPrompt: (text: string) => void;
   /** Begin a fresh chat scoped to a project (opening a project workspace). */
   startProjectChat: (project: ConversationProject) => void;
+  /** Create an empty conversation so a file can be uploaded before the first prompt. */
+  createAttachmentConversation: (title: string) => Conversation;
   /** Append the assistant's reply and mark it as the one to reveal. */
   receiveReply: (conversationId: string, text: string) => void;
   /** The reveal finished (or was skipped). */
@@ -127,6 +131,8 @@ export type ChatState = {
   togglePinned: (id: string) => void;
   deleteConversation: (id: string) => void;
   removeAttachment: (conversationId: string, attachmentId: string) => void;
+  addAttachment: (conversationId: string, attachment: ChatAttachment) => void;
+  replaceAttachments: (conversationId: string, attachments: ChatAttachment[]) => void;
 };
 
 /** First line of the prompt, trimmed to a row-sized label. */
@@ -196,6 +202,17 @@ export function migrateChatState(persisted: unknown, version: number): unknown {
     }));
   }
 
+  if (version < 5) {
+    conversations = conversations.map((conversation) => ({
+      ...conversation,
+      attachments: (conversation.attachments ?? []).map((attachment) => ({
+        ...attachment,
+        mimeType: attachment.mimeType ?? 'application/octet-stream',
+        size: attachment.size ?? 0,
+      })),
+    }));
+  }
+
   return { ...state, conversations };
 }
 
@@ -214,6 +231,26 @@ export const useChatStore = create<ChatState>()(
 
       startProjectChat: (project) =>
         set({ activeId: null, streamingId: null, pendingProject: project }),
+
+      createAttachmentConversation: (title) => {
+        const now = Date.now();
+        const conversation: Conversation = {
+          id: newId(),
+          title: titleFrom(title || 'New chat'),
+          model: get().model,
+          updatedAt: now,
+          pinned: false,
+          project: get().pendingProject,
+          messages: [],
+          attachments: [],
+        };
+        set({
+          conversations: [conversation, ...get().conversations],
+          activeId: conversation.id,
+          pendingProject: null,
+        });
+        return conversation;
+      },
 
       sendPrompt: (text) => {
         const trimmed = text.trim();
@@ -376,6 +413,29 @@ export const useChatStore = create<ChatState>()(
                   ),
                 }
               : conversation,
+          ),
+        }),
+
+      addAttachment: (conversationId, attachment) =>
+        set({
+          conversations: get().conversations.map((conversation) =>
+            conversation.id === conversationId
+              ? {
+                  ...conversation,
+                  attachments: [
+                    attachment,
+                    ...conversation.attachments.filter((item) => item.id !== attachment.id),
+                  ],
+                  updatedAt: attachment.at,
+                }
+              : conversation,
+          ),
+        }),
+
+      replaceAttachments: (conversationId, attachments) =>
+        set({
+          conversations: get().conversations.map((conversation) =>
+            conversation.id === conversationId ? { ...conversation, attachments } : conversation,
           ),
         }),
     }),

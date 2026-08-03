@@ -9,6 +9,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { useColorScheme } from 'react-native';
 
 import { queryClient } from '@/shared/api/queryClient';
+import AuthSessionBoundary from '@/services/AuthSessionBoundary';
 
 /*
  * Root layout — the app shell. Providers and the top-level Stack, nothing else.
@@ -64,6 +65,7 @@ export default function RootLayout(): React.JSX.Element {
       <QueryClientProvider client={queryClient}>
         <SafeAreaProvider>
           <ThemeProvider value={navTheme}>
+            <AuthSessionBoundary />
             <StatusBar
               barStyle={isDark ? 'light-content' : 'dark-content'}
               backgroundColor="transparent"

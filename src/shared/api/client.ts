@@ -1,5 +1,5 @@
 import {
-  clearAuthSession,
+  invalidateAuthSession,
   readAuthSession,
   saveAuthSession,
   type AuthSession,
@@ -7,6 +7,11 @@ import {
 
 const DEFAULT_API_BASE_URL = 'http://localhost:4000/api/v1';
 const REQUEST_TIMEOUT_MS = 15_000;
+
+export function apiUrl(path: string): string {
+  const baseUrl = (process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '');
+  return baseUrl + (path.startsWith('/') ? path : '/' + path);
+}
 
 export type ApiRequestOptions = RequestInit & {
   authenticated?: boolean;
@@ -46,6 +51,7 @@ export async function apiRequest<T>(
   } = options;
   const session = authenticated ? await readAuthSession() : null;
   if (authenticated && !session) {
+    await invalidateAuthSession();
     throw new ApiError(401, 'AUTH_SESSION_MISSING', 'Please sign in again.');
   }
 
@@ -62,14 +68,18 @@ async function executeRequest<T>(
   const timeoutController = new AbortController();
   const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
   const signal = combineSignals(options.signal, timeoutController.signal);
-  const baseUrl = (process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '');
   const headers = new Headers(options.headers);
   headers.set('Accept', 'application/json');
-  headers.set('Content-Type', 'application/json');
+  // Fastify rejects an empty request as invalid JSON when a bodyless request
+  // (notably DELETE) advertises application/json. Only describe a payload when
+  // one is actually present; callers can still provide an explicit content type.
+  if (typeof options.body === 'string' && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
   if (session) headers.set('Authorization', `${session.tokenType} ${session.accessToken}`);
 
   try {
-    const response = await fetch(baseUrl + (path.startsWith('/') ? path : '/' + path), {
+    const response = await fetch(apiUrl(path), {
       ...options,
       headers,
       signal,
@@ -134,7 +144,7 @@ async function refreshAuthSession(session: AuthSession): Promise<AuthSession> {
       // explicit refresh rejection proves that the persisted session is no
       // longer valid.
       if (error instanceof ApiError && error.status === 401) {
-        await clearAuthSession();
+        await invalidateAuthSession();
       }
       throw error;
     } finally {
