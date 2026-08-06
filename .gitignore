@@ -12,8 +12,6 @@ node_modules/
 .pnp.*
 
 # Environment files and local secrets
-.env
-.env.*
 !.env.example
 
 # Expo, React Native, and build output
@@ -52,3 +50,4 @@ setup.sh
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
+config.bat
