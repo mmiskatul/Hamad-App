@@ -9,7 +9,7 @@
     "mcp-jira-shim": "./server.mjs"
   },
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node api.js && node server.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
