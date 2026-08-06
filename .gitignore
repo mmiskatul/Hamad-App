@@ -12,8 +12,6 @@ node_modules/
 .pnp.*
 
 # Environment files and local secrets
-.env
-.env.*
 !.env.example
 
 # Expo, React Native, and build output
@@ -38,7 +36,6 @@ coverage/
 .DS_Store
 Thumbs.db
 .idea/
-.vscode/
 
 # Local MCP server config (personal tokens; not for the team)
 /.mcp.json
@@ -52,3 +49,4 @@ setup.sh
 branch_structure.json
 temp_auto_push.bat
 temp_interactive_push.bat
+config.bat
