@@ -43,10 +43,10 @@ beforeEach(() => {
 });
 
 it('keeps the first reply alive when fresh chat unmounts after creating the conversation', async () => {
-  let resolveReply: ((value: string) => void) | undefined;
+  let resolveReply: ((value: { id: string; text: string; generatedImages: never[] }) => void) | undefined;
   requestReplyMock.mockImplementation(
     (_prompt, options) =>
-      new Promise<string>((resolve) => {
+      new Promise<{ id: string; text: string; generatedImages: never[] }>((resolve) => {
         resolveReply = resolve;
         expect(options.signal?.aborted).toBe(false);
       }),
@@ -64,7 +64,7 @@ it('keeps the first reply alive when fresh chat unmounts after creating the conv
   expect(signal?.aborted).toBe(false);
 
   await act(async () => {
-    resolveReply?.('Yes, how can I help?');
+    resolveReply?.({ id: 'srv-reply-1', text: 'Yes, how can I help?', generatedImages: [] });
     await Promise.resolve();
   });
 
@@ -72,11 +72,79 @@ it('keeps the first reply alive when fresh chat unmounts after creating the conv
     .getState()
     .conversations.find((item) => item.id === conversationId);
   expect(conversation?.messages.at(-1)).toMatchObject({
+    id: 'srv-reply-1',
     role: 'assistant',
     text: 'Yes, how can I help?',
   });
   expect(useChatStore.getState().thinkingFor).toBeNull();
+  expect(useChatStore.getState().streamingId).toBe('srv-reply-1');
   expect(refreshUsageMock).toHaveBeenCalledTimes(1);
+});
+
+it('files generated images on the assistant message so they render immediately', async () => {
+  requestReplyMock.mockResolvedValue({
+    id: 'srv-img-1',
+    text: 'Here you go',
+    generatedImages: [
+      {
+        id: 'att-1',
+        name: 'cat.png',
+        mimeType: 'image/png',
+        size: 1024,
+        at: 1000,
+        uri: 'http://api/conversations/c1/attachments/att-1/content',
+      },
+    ],
+  });
+
+  const { result } = renderHook(() => useSendPrompt(null));
+
+  await act(async () => {
+    result.current('Draw a cat');
+    await Promise.resolve();
+  });
+
+  const conversation = useChatStore.getState().conversations[0];
+  expect(conversation?.messages.at(-1)).toMatchObject({
+    id: 'srv-img-1',
+    role: 'assistant',
+    text: 'Here you go',
+    generatedImages: [
+      expect.objectContaining({
+        id: 'att-1',
+        name: 'cat.png',
+        mimeType: 'image/png',
+      }),
+    ],
+  });
+  expect(useChatStore.getState().streamingId).toBe('srv-img-1');
+});
+
+it('retries refreshConversation once on a transient 502 and still lands the reply', async () => {
+  requestReplyMock.mockResolvedValue({
+    id: 'srv-img-2',
+    text: 'Here you go',
+    generatedImages: [],
+  });
+  refreshConversationMock
+    .mockRejectedValueOnce(new ApiError(502, 'PROVIDER_REQUEST_FAILED', 'Temporary failure'))
+    .mockResolvedValueOnce(null);
+
+  const { result } = renderHook(() => useSendPrompt(null));
+
+  await act(async () => {
+    result.current('Draw a dog');
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  const conversation = useChatStore.getState().conversations[0];
+  expect(conversation?.messages.at(-1)).toMatchObject({
+    id: 'srv-img-2',
+    role: 'assistant',
+    text: 'Here you go',
+  });
+  expect(refreshConversationMock).toHaveBeenCalledTimes(2);
 });
 
 it('sends the model currently selected for an open conversation', () => {

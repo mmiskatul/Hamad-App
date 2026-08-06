@@ -28,7 +28,11 @@ describe('requestReply', () => {
       clientMessageId: 'message-1',
       modelId: 'deepseek',
       responseLanguage: 'en',
-    })).resolves.toBe('Backend reply');
+    })).resolves.toEqual({
+      id: 'reply-1',
+      text: 'Backend reply',
+      generatedImages: [],
+    });
 
     expect(apiRequestMock).toHaveBeenCalledWith('/conversations/conversation-1/messages', {
       method: 'POST',
@@ -41,6 +45,46 @@ describe('requestReply', () => {
         modelId: 'deepseek',
         responseLanguage: 'en',
       }),
+    });
+  });
+
+  it('maps generated images from the response into ChatAttachment records', async () => {
+    apiRequestMock.mockResolvedValue({
+      assistantMessage: {
+        id: 'reply-1',
+        content: 'Here you go',
+        modelId: 'gemini',
+        provider: 'Gemini',
+        language: 'en',
+        createdAt: '2026-08-01T00:00:00.000Z',
+        generatedImages: [
+          {
+            id: 'att-1',
+            name: 'cat.png',
+            mimeType: 'image/png',
+            size: 1024,
+            createdAt: '2026-08-01T00:00:00.000Z',
+          },
+        ],
+      },
+    });
+
+    await expect(requestReply('draw a cat', {
+      conversationId: 'conversation-1',
+      clientMessageId: 'message-1',
+      modelId: 'gemini',
+    })).resolves.toEqual({
+      id: 'reply-1',
+      text: 'Here you go',
+      generatedImages: [
+        expect.objectContaining({
+          id: 'att-1',
+          name: 'cat.png',
+          mimeType: 'image/png',
+          size: 1024,
+          uri: expect.stringContaining('/conversations/conversation-1/attachments/att-1/content'),
+        }),
+      ],
     });
   });
 
@@ -76,7 +120,11 @@ describe('requestReply', () => {
       conversationId: 'conversation-1',
       clientMessageId: 'message-1',
       modelId: 'gpt',
-    })).resolves.toBe('Recovered reply');
+    })).resolves.toEqual({
+      id: 'reply-2',
+      text: 'Recovered reply',
+      generatedImages: [],
+    });
 
     expect(apiRequestMock).toHaveBeenCalledTimes(2);
     expect(apiRequestMock.mock.calls[0]).toEqual(apiRequestMock.mock.calls[1]);

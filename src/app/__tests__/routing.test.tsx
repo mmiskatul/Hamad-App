@@ -71,6 +71,7 @@ jest.mock('@/features/settings', () => {
     ContactSupportScreen: () => React.createElement(View, { testID: 'support-screen' }),
     MemoryScreen: () => React.createElement(View, { testID: 'memory-screen' }),
     MemorySummaryScreen: () => React.createElement(View, { testID: 'memory-summary-screen' }),
+    ServerSettingsScreen: () => React.createElement(View, { testID: 'server-settings-screen' }),
   };
 });
 

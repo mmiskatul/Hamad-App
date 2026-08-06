@@ -3,6 +3,7 @@ import { Redirect } from 'expo-router';
 
 import { restoreAuthSession, SplashScreen, whenAuthFlowHydrated } from '@/features/auth';
 import { useAppBootstrap, type BootstrapTask } from '@/shared/bootstrap';
+import { loadApiBaseUrlOverride } from '@/shared/api/baseUrl';
 import type { AuthSession } from '@/shared/auth';
 
 /*
@@ -26,7 +27,10 @@ import type { AuthSession } from '@/shared/auth';
  * root: shared/bootstrap must not import from features/, but a route may import
  * both. whenAuthFlowHydrated reads the persisted auth flow back from
  * AsyncStorage, so the splash absorbs that round-trip and /password |
- * /verify-email never mount before their state is known.
+ * /verify-email never mount before their state is known. The API base URL
+ * override (loadApiBaseUrlOverride) joins the same list — it caches whatever
+ * the user entered on the Server Settings screen so every subsequent request
+ * can resolve the URL synchronously.
  *
  * Module-level constant so the array identity is stable across renders.
  */
@@ -36,7 +40,7 @@ export default function SplashRoute(): React.JSX.Element {
     setSession(await restoreAuthSession());
   }, []);
   const bootTasks = useMemo<readonly BootstrapTask[]>(
-    () => [whenAuthFlowHydrated, restoreSession],
+    () => [whenAuthFlowHydrated, restoreSession, loadApiBaseUrlOverride],
     [restoreSession],
   );
   const { booted } = useAppBootstrap(bootTasks);

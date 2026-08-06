@@ -120,7 +120,10 @@ export type ChatState = {
   /** Create an empty conversation so a file can be uploaded before the first prompt. */
   createAttachmentConversation: (title: string) => Conversation;
   /** Append the assistant's reply and mark it as the one to reveal. */
-  receiveReply: (conversationId: string, text: string) => void;
+  receiveReply: (
+    conversationId: string,
+    reply: string | { id?: string; text: string; generatedImages?: ChatAttachment[] },
+  ) => void;
   setMessageFeedback: (
     conversationId: string,
     messageId: string,
@@ -316,16 +319,25 @@ export const useChatStore = create<ChatState>()(
        * — plan-aware model access plus automatic fallback. The CALLER owns the
        * request; this only files the result, so swapping the stub for the real
        * stream changes nothing here.
+       *
+       * `reply` is the structured `{ id, text, generatedImages }` returned by
+       * `requestReply`. The error path passes a plain string because there is
+       * no server id to anchor on and no images to file. The server id is
+       * what keeps `streamingId` valid after `refreshConversation` replaces
+       * the local message with the server's authoritative copy.
        */
-      receiveReply: (conversationId, text) => {
+      receiveReply: (conversationId, reply) => {
+        const text = typeof reply === 'string' ? reply : reply.text;
         const trimmed = text.trim();
         if (!trimmed) return;
 
+        const generatedImages = typeof reply === 'string' ? undefined : reply.generatedImages;
         const message: ChatMessage = {
-          id: newId('m'),
+          id: (typeof reply === 'string' ? undefined : reply.id) ?? newId('m'),
           role: 'assistant',
           text: trimmed,
           at: Date.now(),
+          ...(generatedImages?.length ? { generatedImages } : {}),
         };
 
         set({

@@ -141,6 +141,23 @@
       "privacy": "Privacy Policy",
       "support": "Contact Support"
     },
+    "serverSettings": {
+      "title": "Server Settings",
+      "description": "Point the app at a different backend URL. Useful when the LAN address changes or you need to talk to a staging server.",
+      "urlLabel": "API base URL",
+      "test": "Test",
+      "save": "Save",
+      "reset": "Reset to default",
+      "clear": "Clear override",
+      "currentLabel": "Active URL",
+      "defaultLabel": "Default: {{defaultUrl}}",
+      "savedTitle": "Saved",
+      "savedMessage": "The new API base URL will be used on the next request.",
+      "testOkTitle": "Connected",
+      "testOkMessage": "Reached {{url}} successfully.",
+      "testFailTitle": "Could not reach the server"
+    },
+    "serverSettingsLink": "Server settings",
     "legal": {
       "empty": "This document isn't available yet."
     },

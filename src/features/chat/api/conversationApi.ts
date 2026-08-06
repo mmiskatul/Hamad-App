@@ -8,7 +8,7 @@ import { useChatStore, type ChatAttachment, type ChatMessage, type Conversation,
 
 export type PickedAttachment = { uri: string; name: string; mimeType: string };
 
-type AttachmentResponse = {
+export type AttachmentResponse = {
   id: string;
   name: string;
   mimeType: string;
@@ -253,7 +253,7 @@ export function attachmentContentUrl(conversationId: string, attachmentId: strin
   );
 }
 
-function toAttachment(conversationId: string, attachment: AttachmentResponse): ChatAttachment {
+export function toAttachment(conversationId: string, attachment: AttachmentResponse): ChatAttachment {
   return {
     id: attachment.id,
     name: attachment.name,

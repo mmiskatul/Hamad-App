@@ -10,6 +10,7 @@ import {
   PencilEdit02Icon,
   PieChartIcon,
   SecurityCheckIcon,
+  ServerStack01Icon,
   TranslateIcon,
 } from '@hugeicons/core-free-icons';
 
@@ -214,6 +215,18 @@ export default function ProfileScreen(): React.JSX.Element {
             label={t('settings.rows.about')}
             onPress={() => router.push('/about')}
             testID="settings-about"
+          />
+
+          {/*
+            Dev-tool row: lets a signed-in user repoint the mobile app at a
+            different backend (e.g. when the LAN IP changes). Hidden behind the
+            about row so the regular settings hierarchy still reads cleanly.
+          */}
+          <SettingRow
+            icon={ServerStack01Icon}
+            label={t('settings.serverSettings.title')}
+            onPress={() => router.push('/server-settings')}
+            testID="settings-server"
           />
 
           <SettingRow

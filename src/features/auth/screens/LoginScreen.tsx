@@ -1,5 +1,5 @@
 import React, { useCallback, useState } from 'react';
-import { View } from 'react-native';
+import { Pressable, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -206,6 +206,19 @@ export default function LoginScreen(): React.JSX.Element {
             <AppText style={{ ...AUTH_TYPE.caption, color: palette.onSurface, textAlign: 'center' }}>
               {t('auth.login.legal.terms')} {t('auth.login.legal.separator')} {t('auth.login.legal.privacy')}
             </AppText>
+            {/* Dev-tool: lets the user fix a wrong backend URL without quitting the app. */}
+            <Pressable
+              onPress={() => router.push('/server-settings')}
+              accessibilityRole="link"
+              accessibilityLabel={t('settings.serverSettingsLink')}
+              hitSlop={8}
+              style={{ marginTop: 6 }}
+              testID="login-server-settings"
+            >
+              <AppText style={{ ...AUTH_TYPE.caption, color: palette.muted, textAlign: 'center' }}>
+                {t('settings.serverSettingsLink')}
+              </AppText>
+            </Pressable>
           </View>
         </View>
       </KeyboardAvoider>

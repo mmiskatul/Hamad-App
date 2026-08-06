@@ -5,12 +5,25 @@ import {
   type AuthSession,
 } from '@/shared/auth';
 
-const DEFAULT_API_BASE_URL = 'http://localhost:4000/api/v1';
+import { resolveApiBaseUrl } from './baseUrl';
+
 const REQUEST_TIMEOUT_MS = 15_000;
 
+/*
+ * Statuses that mean "try again" rather than "the request is permanently bad".
+ * 0 is the network-error sentinel thrown by apiRequest when fetch can't reach
+ * the server; 408 is the explicit timeout; 502 is Fastify relaying an upstream
+ * provider failure. Used by the chat flow's send-message retry and the
+ * post-reply conversation refresh — same list, one definition.
+ */
+export const TRANSIENT_NETWORK_STATUSES = [0, 408, 502] as const;
+
+export function isTransientNetworkError(error: unknown): boolean {
+  return error instanceof ApiError && (TRANSIENT_NETWORK_STATUSES as readonly number[]).includes(error.status);
+}
+
 export function apiUrl(path: string): string {
-  const baseUrl = (process.env.EXPO_PUBLIC_API_BASE_URL ?? DEFAULT_API_BASE_URL).replace(/\/$/, '');
-  return baseUrl + (path.startsWith('/') ? path : '/' + path);
+  return resolveApiBaseUrl() + (path.startsWith('/') ? path : '/' + path);
 }
 
 export type ApiRequestOptions = RequestInit & {
@@ -65,6 +78,12 @@ async function executeRequest<T>(
   retryOnUnauthorized: boolean,
   timeoutMs: number,
 ): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  const url = apiUrl(path);
+  const requestStartedAt = Date.now();
+
+  logRequest(method, url);
+
   const timeoutController = new AbortController();
   const timeout = setTimeout(() => timeoutController.abort(), timeoutMs);
   const signal = combineSignals(options.signal, timeoutController.signal);
@@ -79,18 +98,22 @@ async function executeRequest<T>(
   if (session) headers.set('Authorization', `${session.tokenType} ${session.accessToken}`);
 
   try {
-    const response = await fetch(apiUrl(path), {
+    const response = await fetch(url, {
       ...options,
       headers,
       signal,
     });
 
     const body = (await response.json().catch(() => ({}))) as T & ErrorEnvelope;
+    const elapsedMs = Date.now() - requestStartedAt;
+    logResponse(method, url, response.status, elapsedMs);
+
     if (response.status === 401 && session && retryOnUnauthorized) {
       const refreshed = await refreshAuthSession(session);
       return executeRequest<T>(path, options, refreshed, false, timeoutMs);
     }
     if (!response.ok) {
+      logError(method, url, response.status, body);
       throw new ApiError(
         response.status,
         body.error?.code ?? 'REQUEST_FAILED',
@@ -99,17 +122,56 @@ async function executeRequest<T>(
     }
     return body;
   } catch (error) {
-    if (error instanceof ApiError) throw error;
+    const elapsedMs = Date.now() - requestStartedAt;
+    if (error instanceof ApiError) {
+      logError(method, url, error.status, { message: error.message, code: error.code }, elapsedMs);
+      throw error;
+    }
     if (error instanceof Error && error.name === 'AbortError' && options.signal?.aborted) {
+      logError(method, url, 'aborted', { message: 'cancelled by caller' }, elapsedMs);
       throw error;
     }
     if (error instanceof Error && error.name === 'AbortError') {
+      logError(method, url, 408, { message: 'request timed out' }, elapsedMs);
       throw new ApiError(408, 'REQUEST_TIMEOUT', 'The request timed out.');
     }
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logError(method, url, 0, { message: `network error: ${message}` }, elapsedMs);
     throw new ApiError(0, 'NETWORK_ERROR', 'Could not connect to the server.');
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/*
+ * Console logging for the API client. Gated on `__DEV__` so production
+ * bundles stay quiet — Expo's Metro sets `__DEV__` to true for dev builds
+ * and false for `expo export` / EAS production profiles.
+ *
+ * `[api]` tag makes the lines easy to filter in the Expo/React Native
+ * console (Metro, LogBox, `npx react-native log-ios` / `log-android`,
+ * the device console).
+ */
+function logRequest(method: string, url: string): void {
+  if (!__DEV__) return;
+  console.log(`[api] → ${method} ${url}`);
+}
+
+function logResponse(method: string, url: string, status: number, elapsedMs: number): void {
+  if (!__DEV__) return;
+  console.log(`[api] ← ${method} ${url} ${status} (${elapsedMs}ms)`);
+}
+
+function logError(
+  method: string,
+  url: string,
+  status: number | string,
+  body: unknown,
+  elapsedMs?: number,
+): void {
+  if (!__DEV__) return;
+  const suffix = elapsedMs === undefined ? '' : ` (${elapsedMs}ms)`;
+  console.warn(`[api] ✗ ${method} ${url} ${status}${suffix}`, body);
 }
 
 function combineSignals(first: AbortSignal | null | undefined, second: AbortSignal): AbortSignal {

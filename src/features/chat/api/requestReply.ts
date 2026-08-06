@@ -1,6 +1,7 @@
-import { ApiError, apiRequest } from '@/shared/api/client';
+import { apiRequest, isTransientNetworkError } from '@/shared/api/client';
 import type { ModelId } from '../constants';
-import type { ConversationProject } from '../store/chatStore';
+import type { ConversationProject, ChatAttachment } from '../store/chatStore';
+import { toAttachment, type AttachmentResponse } from './conversationApi';
 
 export type ResponseLanguage = 'auto' | 'en' | 'ar' | 'both';
 
@@ -21,17 +22,30 @@ type MessageResponse = {
     provider: string;
     language: 'en' | 'ar' | 'mixed';
     createdAt: string;
+    generatedImages?: AttachmentResponse[];
   };
+};
+
+export type AssistantReply = {
+  id: string;
+  text: string;
+  generatedImages: ChatAttachment[];
 };
 
 /**
  * Sends the prompt to the backend-owned conversation. The backend chooses the
  * provider, checks availability, rebuilds shared context, and stores both turns.
+ *
+ * Returns the server-side assistant message id (used by the store as the
+ * message id so the reveal animation and feedback map survive the follow-up
+ * `refreshConversation`), the rendered text, and the generated images mapped
+ * through the same `toAttachment` helper the conversation API uses — the URL
+ * is the one `<Image>` already knows how to fetch with the auth headers.
  */
 export async function requestReply(
   prompt: string,
   options: RequestReplyOptions,
-): Promise<string> {
+): Promise<AssistantReply> {
   const request = () => apiRequest<MessageResponse>(
       `/conversations/${encodeURIComponent(options.conversationId)}/messages`,
       {
@@ -49,18 +63,22 @@ export async function requestReply(
       },
     );
 
+  const toReply = (response: MessageResponse): AssistantReply => ({
+    id: response.assistantMessage.id,
+    text: response.assistantMessage.content,
+    generatedImages: (response.assistantMessage.generatedImages ?? []).map((image) =>
+      toAttachment(options.conversationId, image),
+    ),
+  });
+
   try {
-    return (await request()).assistantMessage.content;
+    return toReply(await request());
   } catch (error) {
-    // The endpoint is idempotent by clientMessageId. Retrying once is safe even
-    // if the first response was lost after Fastify stored the assistant reply.
-    if (isTransientReplyError(error) && !options.signal?.aborted) {
-      return (await request()).assistantMessage.content;
+    // Idempotent by clientMessageId — a retry is safe even if the first
+    // response was lost after Fastify stored the assistant reply.
+    if (isTransientNetworkError(error) && !options.signal?.aborted) {
+      return toReply(await request());
     }
     throw error;
   }
-}
-
-function isTransientReplyError(error: unknown): error is ApiError {
-  return error instanceof ApiError && [0, 408, 502].includes(error.status);
 }
